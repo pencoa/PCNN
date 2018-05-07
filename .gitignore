@@ -1,0 +1,12 @@
+*.pyc
+*.npz
+*.pkl
+.DS_Store
+*.tgz
+*.gz
+*.tsv
+*.proto
+*.pb
+*.txt
+*.zip
+test*
