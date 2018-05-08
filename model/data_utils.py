@@ -321,11 +321,7 @@ def minibatches(data, minibatch_size):
     word_batch, pos1_batch, pos2_batch, entpos_batch, y_batch = [], [], [], [], []
     for (word, pos1, pos2, entpos, y) in data:
         if len(y_batch) == minibatch_size:
-            # perform padding of the given data
-            word_batch, sequence_lengths = pad_sequences(word_batch, 0)
-            pos1_batch, _ = pad_sequences(pos1_batch, 0)
-            pos2_batch, _ = pad_sequences(pos2_batch, 0)
-
+            sequence_lengths = get_sequences_length(word_batch)
             assert len(entpos_batch) == len(sequence_lengths)
             pos_batch = list()
             for idx, i in enumerate(entpos_batch):
@@ -342,11 +338,7 @@ def minibatches(data, minibatch_size):
         y_batch      += [y]
 
     if len(y_batch) != 0:
-        # perform padding of the given data
-        word_batch, sequence_lengths = pad_sequences(word_batch, 0)
-        pos1_batch, _ = pad_sequences(pos1_batch, 0)
-        pos2_batch, _ = pad_sequences(pos2_batch, 0)
-
+        sequence_lengths = get_sequences_length(word_batch)
         assert len(entpos_batch) == len(sequence_lengths)
         pos_batch = list()
         for idx, i in enumerate(entpos_batch):
@@ -355,24 +347,75 @@ def minibatches(data, minibatch_size):
         yield word_batch, pos1_batch, pos2_batch, pos_batch, y_batch
 
 
-def pad_sequences(sequences, pad_tok=0, padding='post'):
+def piece_split(data, pos, width=2):
+    """Split each sentence in batch into three piece
+    accodring to entity1, entity2 position and sentence length.
+
+    Args:
+        data: batch of list of ids, representing batch of sentences.
+        pos: list of positions, containing entity1, entity2 position and
+                sentence length of corresponding sentence in data.
+        width: int
+    Return:
+        left: batch of list of ids, left part of sentences.
+        mid: batch of list of ids, middle part of sentences.
+        right: batch of list of ids, right part of sentences.
+
+    """
+    assert len(data) == len(pos)
+    assert np.asarray(pos, dtype=np.int32).shape[1] == 3
+    num = len(data)
+    left  = [[] for i in range(num)]
+    mid   = [[] for i in range(num)]
+    right = [[] for i in range(num)]
+    for i in range(num):
+        left[i].append(data[i][0:(pos[i][0]+width)])
+        mid[i].append(data[i][max(0,(pos[i][0]-width)):(pos[i][1]+width)])
+        right[i].append(data[i][(pos[i][1]-width):(pos[i][2]-1)])
+
+    return left, mid, right
+
+        # piecewise_max = list()
+        # for i in splited:
+        #     for j in i:
+        #         piecewise_max.append(max(j))
+        #
+        # assert len(piecewise_max) == pos.shape[0]*pos.shape[1]
+        # piecewise_max = np.asarray(piecewise_max, np.float32)
+        # return piecewise_max
+
+
+# def pad_sequences(sequences, pad_tok=0, padding='post'):
+#     """
+#     Args:
+#         sequences: a generator of list or tuple
+#         pad_tok: the char to pad with
+#     Returns:
+#         a list of list where each sublist has same length
+#         a list record original length of sequences
+#     """
+#     sequence_padded = []
+#     sequence_padded = tf.keras.preprocessing.sequence.pad_sequences(sequences,
+#                                         padding='post', value=pad_tok)
+#     sequence_length = get_sequences_length(sequences)
+#
+#     return sequence_padded, sequence_length
+
+
+def get_sequences_length(sequences):
     """
     Args:
         sequences: a generator of list or tuple
-        pad_tok: the char to pad with
     Returns:
-        a list of list where each sublist has same length
         a list record original length of sequences
     """
-    sequence_padded, sequence_length = [], []
-    sequence_padded = tf.keras.preprocessing.sequence.pad_sequences(sequences,
-                                        padding='post', value=pad_tok)
+    sequence_length = []
 
     for seq in sequences:
         seq = list(seq)
         sequence_length += [len(seq)]
 
-    return sequence_padded, sequence_length
+    return sequence_length
 
 
 def select_best_instance(data):

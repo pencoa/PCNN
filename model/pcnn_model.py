@@ -2,7 +2,7 @@ import numpy as np
 import os
 import tensorflow as tf
 
-from .data_utils import minibatches, pad_sequences
+from .data_utils import minibatches, pad_sequences, piece_split
 from .general_utils import Progbar
 from .base_model import BaseModel
 
@@ -19,21 +19,41 @@ class PCNNModel(BaseModel):
 
     def add_placeholders(self):
         """Define placeholders = entries to computational graph"""
-        # shape = (batch size, max length of sentence in batch)
-        self.word_ids = tf.placeholder(tf.int32, shape=[None, None],
-                        name="word_ids")
+        # shape = (batch size, max length of left part of sentence in batch)
+        self.word_ids_left = tf.placeholder(tf.int32, shape=[None, None],
+                        name="word_ids_left")
 
-        # shape = (batch size, max length of sentence in batch)
-        self.pos1_ids = tf.placeholder(tf.int32, shape=[None, None],
-                        name="pos1_ids")
+        # shape = (batch size, max length of left part of sentence in batch)
+        self.pos1_ids_left = tf.placeholder(tf.int32, shape=[None, None],
+                        name="pos1_ids_left")
 
-        # shape = (batch size, max length of sentence in batch)
-        self.pos2_ids = tf.placeholder(tf.int32, shape=[None, None],
-                        name="pos2_ids")
+        # shape = (batch size, max length of left part of sentence in batch)
+        self.pos2_ids_left = tf.placeholder(tf.int32, shape=[None, None],
+                        name="pos2_ids_left")
 
-        # shape = (batch size, 3)
-        self.pos = tf.placeholder(tf.int32, shape=[None, 3],
-                        name="pos")
+        # shape = (batch size, max length of middle part of sentence in batch)
+        self.word_ids_mid = tf.placeholder(tf.int32, shape=[None, None],
+                        name="word_ids_mid")
+
+        # shape = (batch size, max length of middle part of sentence in batch)
+        self.pos1_ids_mid = tf.placeholder(tf.int32, shape=[None, None],
+                        name="pos1_ids_mid")
+
+        # shape = (batch size, max length of middle part of sentence in batch)
+        self.pos2_ids_mid = tf.placeholder(tf.int32, shape=[None, None],
+                        name="pos2_ids_mid")
+
+        # shape = (batch size, max length of right part of sentence in batch)
+        self.word_ids_right = tf.placeholder(tf.int32, shape=[None, None],
+                        name="word_ids_right")
+
+        # shape = (batch size, max length of right part of sentence in batch)
+        self.pos1_ids_right = tf.placeholder(tf.int32, shape=[None, None],
+                        name="pos1_ids_right")
+
+        # shape = (batch size, max length of right part of sentence in batch)
+        self.pos2_ids_right = tf.placeholder(tf.int32, shape=[None, None],
+                        name="pos2_ids_right")
 
         # shape = (batch size, 1)
         self.relations = tf.placeholder(tf.int32, shape=[None, 1],
@@ -62,12 +82,34 @@ class PCNNModel(BaseModel):
             dict {placeholder: value}
 
         """
+        width = self.config.window_size - 1
+        word_ids_left, word_ids_mid, word_ids_right = piece_split(word_ids, pos, width)
+        pos1_ids_left, pos1_ids_mid, pos1_ids_right = piece_split(pos1_ids, pos, width)
+        pos2_ids_left, pos2_ids_mid, pos2_ids_right = piece_split(pos2_ids, pos, width)
+
+        word_ids_left = tf.keras.preprocessing.sequence.pad_sequences(word_ids_left, padding='post', value=0)
+        pos1_ids_left = tf.keras.preprocessing.sequence.pad_sequences(pos1_ids_left, padding='post', value=0)
+        pos2_ids_left = tf.keras.preprocessing.sequence.pad_sequences(pos2_ids_left, padding='post', value=0)
+
+        word_ids_mid = tf.keras.preprocessing.sequence.pad_sequences(word_ids_mid, padding='post', value=0)
+        pos1_ids_mid = tf.keras.preprocessing.sequence.pad_sequences(pos1_ids_mid, padding='post', value=0)
+        pos2_ids_mid = tf.keras.preprocessing.sequence.pad_sequences(pos2_ids_mid, padding='post', value=0)
+
+        word_ids_right = tf.keras.preprocessing.sequence.pad_sequences(word_ids_right, padding='post', value=0)
+        pos1_ids_right = tf.keras.preprocessing.sequence.pad_sequences(pos1_ids_right, padding='post', value=0)
+        pos2_ids_right = tf.keras.preprocessing.sequence.pad_sequences(pos2_ids_right, padding='post', value=0)
+
         # build feed dictionary
         feed = {
-            self.word_ids: word_ids,
-            self.pos1_ids: pos1_ids,
-            self.pos2_ids: pos2_ids,
-            self.pos: pos
+            self.word_ids_left:  word_ids_left,
+            self.pos1_ids_left:  pos1_ids_left,
+            self.pos2_ids_left:  pos2_ids_left,
+            self.word_ids_mid:   word_ids_mid,
+            self.pos1_ids_mid:   pos1_ids_mid,
+            self.pos2_ids_mid:   pos2_ids_mid,
+            self.word_ids_right: word_ids_right,
+            self.pos1_ids_right: pos1_ids_right,
+            self.pos2_ids_right: pos2_ids_right
         }
 
         if relations is not None:
@@ -82,7 +124,7 @@ class PCNNModel(BaseModel):
         return feed
 
 
-    def add_sentence_embeddings_op(self):
+    def add_sentence_embeddings_op(self, word_ids, pos1_ids, pos2_ids):
         """Defines self.sentence_embeddings
 
         If self.config.embeddings is not None and is a np array initialized
@@ -90,7 +132,7 @@ class PCNNModel(BaseModel):
         and we don't train the vectors. Otherwise, a random matrix with
         the correct shape is initialized.
         """
-        with tf.variable_scope("words"):
+        with tf.variable_scope("words", reuse=True) as scope:
             if self.config.embeddings is None:
                 self.logger.info("WARNING: randomly initializing word vectors")
                 _word_embeddings = tf.get_variable(
@@ -104,59 +146,97 @@ class PCNNModel(BaseModel):
                         dtype=tf.float32,
                         trainable=self.config.train_word_embeddings)
 
-            self.word_embeddings = tf.nn.embedding_lookup(_word_embeddings, \
-                    self.word_ids, name="word_embeddings")
+            word_embeddings = tf.nn.embedding_lookup(_word_embeddings, \
+                    word_ids, name="word_embeddings")
 
         # self.word_embeddings =  tf.nn.dropout(word_embeddings, self.dropout)
 
-        with tf.variable_scope("pos1"):
-            self.logger.info("WARNING: randomly initializing pos1 vectors")
+        with tf.variable_scope("pos1", reuse=True) as scope:
+            self.logger.info("randomly initializing pos1 vectors")
             _pos1_embeddings = tf.get_variable(
                     name="_pos1_embeddings",
                     dtype=tf.float32,
                     shape=[self.config.nposition, self.config.dim_dim_pos])
 
-            self.pos1_embeddings = tf.nn.embedding_lookup(_pos1_embeddings, \
-                    self.pos1_ids, name="pos1_embeddings")
+            pos1_embeddings = tf.nn.embedding_lookup(_pos1_embeddings, \
+                    pos1_ids, name="pos1_embeddings")
 
-        with tf.variable_scope("pos2"):
-            self.logger.info("WARNING: randomly initializing pos2 vectors")
+        with tf.variable_scope("pos2", reuse=True) as scope:
+            self.logger.info("randomly initializing pos2 vectors")
             _pos2_embeddings = tf.get_variable(
                     name="_pos2_embeddings",
                     dtype=tf.float32,
                     shape=[self.config.nposition, self.config.dim_dim_pos])
 
-            self.pos2_embeddings = tf.nn.embedding_lookup(_pos2_embeddings, \
-                    self.pos2_ids, name="pos2_embeddings")
+            pos2_embeddings = tf.nn.embedding_lookup(_pos2_embeddings, \
+                    pos2_ids, name="pos2_embeddings")
 
-        assert tf.shape(self.word_embeddings[0]) == \
-            tf.shape(self.pos1_embeddings[0]) == tf.shape(self.pos2_embeddings[0])
-        assert tf.shape(self.word_embeddings[1]) == \
-            tf.shape(self.pos1_embeddings[1]) == tf.shape(self.pos2_embeddings[1])
-        assert tf.shape(self.word_embeddings[2]) == self.config.dim_word
-        assert tf.shape(self.pos1_embeddings[2]) == self.config.dim_pos
-        assert tf.shape(self.pos2_embeddings[2]) == self.config.dim_pos
+        # batch size
+        assert tf.shape(word_embeddings)[0] == \
+            tf.shape(pos1_embeddings)[0] == tf.shape(pos2_embeddings)[0]
+        # max length of sentence part
+        assert tf.shape(word_embeddings)[1] == \
+            tf.shape(pos1_embeddings)[1] == tf.shape(pos2_embeddings)[1]
+        assert tf.shape(word_embeddings)[2] == self.config.dim_word
+        assert tf.shape(pos1_embeddings)[2] == self.config.dim_pos
+        assert tf.shape(pos2_embeddings)[2] == self.config.dim_pos
 
-        with tf.variable_scope("sentence"):
-            self.sentence_embeddings = tf.concat([self.word_embeddings, \
-                self.pos1_embeddings, self.pos2_embeddings], 2)
+        sentence_embeddings = tf.concat([word_embeddings, \
+            pos1_embeddings, pos2_embeddings], 2)
 
-        assert tf.shape(self.sentence_embeddings[2]) == (self.config.dim_word + \
-                    2*self.config.dim_pos)
+        assert tf.shape(sentence_embeddings)[2] == self.config.dim
+        return sentence_embeddings
 
-
-    def add_convolution_op(self):
-        """Defines self.conv
+    def add_convolution_op(self, sentence_embeddings):
+        """Defines conv
         """
-        with tf.variable_scope("conv"):
-            self.conv = tf.layers.conv2d(
-                inputs=self.sentence_embeddings,
+        with tf.variable_scope("conv", reuse=True) as scope:
+            _conv = tf.layers.conv2d(
+                inputs=sentence_embeddings,
                 filters=self.config.feature_maps,
                 kernel_size=[self.config.window_size, self.config.dim],
                 strides=(1, self.config.dim),
-                padding="same"
+                padding="same",
+                name=scope.name
             )
-        assert tf.shape(self.conv)[2] == 1
+        assert tf.shape(_conv)[2] == 1
+
+        conv = tf.reshape(_conv, [-1, \
+            tf.shape(sentence_embeddings)[1], self.config.feature_maps])
+        maxpool = tf.layers.max_pooling1d(
+            inputs=conv,
+            pool_size=tf.shape(sentence_embeddings)[1],
+            strides=tf.shape(sentence_embeddings)[1])
+        assert tf.shape(maxpool)[1] == 1
+        return maxpool
+
+
+    def add_concat_op(self):
+        """Defines self.concat
+        First, concat left, middle, right parts.
+        Second, concat different channels or feature maps.
+        """
+        sentence_embeddings_left  = self.add_sentence_embeddings_op(self.word_ids_left, \
+                                    self.pos1_ids_left, self.pos2_ids_left)
+        sentence_embeddings_mid   = self.add_sentence_embeddings_op(self.word_ids_mid, \
+                                    self.pos1_ids_mid, self.pos2_ids_mid)
+        sentence_embeddings_right = self.add_sentence_embeddings_op(self.word_ids_right, \
+                                    self.pos1_ids_right, self.pos2_ids_right)
+
+        # shape = (batch_size, 1, feature_maps)
+        maxpool_left  = self.add_convolution_op(sentence_embeddings_left)
+        maxpool_mid   = self.add_convolution_op(sentence_embeddings_mid)
+        maxpool_right = self.add_convolution_op(sentence_embeddings_right)
+        # shape = (batch_size, 3, feature_maps)
+        _maxpool = tf.concat([maxpool_left, maxpool_mid, maxpool_right], 1)
+        assert tf.shape(_maxpool)[1] == 3
+        # shape = (batch_size, 3*feature_maps)
+        maxpool  = tf.concat(_maxpool, 2)
+        assert tf.shape(maxpool)[1] == 3 * self.feature_maps
+
+        _gvector = tf.tanh(maxpool)
+        self.gvector = tf.nn.dropout(_gvector, self.config.dropout)
+
 
 
     def add_logits_op(self):
@@ -222,8 +302,8 @@ class PCNNModel(BaseModel):
     def build(self):
         # PCNN specific functions
         self.add_placeholders()
-        self.add_sentence_embeddings_op()
-        self.add_convolution_op()
+        self.add_concat_op()
+
 
         self.add_logits_op()
         self.add_pred_op()
@@ -344,34 +424,34 @@ class PCNNModel(BaseModel):
         return {"acc": 100*acc, "f1": 100*f1}
 
 
-    def piece_split(data, pos):
-        """Split each sentence in batch into three piece
-        accodring to entity1, entity2 position and sentence length.
-
-        Args:
-            data: output matrix of convolution layer, representing batch of sentences.
-            pos: list of positions, containing entity1, entity2 position and
-                    sentence length of corresponding sentence in data.
-        Return:
-            piecewise_max: list of max pooling from sentence piece.
-        """
-        assert data.shape[0] == pos.shape[0]
-        assert pos.shape[1] == 3
-        num = data.shape[0]
-        splited = [[] for i in range(num)]
-        for i in range(num):
-            splited[i].append(data[i][0:pos[i][0]])
-            splited[i].append(data[i][pos[i][0]:pos[i][1]])
-            splited[i].append(data[i][pos[i][1]:pos[i][2]])
-
-        piecewise_max = list()
-        for i in splited:
-            for j in i:
-                piecewise_max.append(max(j))
-
-        assert len(piecewise_max) == pos.shape[0]*pos.shape[1]
-        piecewise_max = np.asarray(piecewise_max, np.float32)
-        return piecewise_max
+    # def piece_split(data, pos):
+    #     """Split each sentence in batch into three piece
+    #     accodring to entity1, entity2 position and sentence length.
+    #
+    #     Args:
+    #         data: output matrix of convolution layer, representing batch of sentences.
+    #         pos: list of positions, containing entity1, entity2 position and
+    #                 sentence length of corresponding sentence in data.
+    #     Return:
+    #         piecewise_max: list of max pooling from sentence piece.
+    #     """
+    #     assert data.shape[0] == pos.shape[0]
+    #     assert pos.shape[1] == 3
+    #     num = data.shape[0]
+    #     splited = [[] for i in range(num)]
+    #     for i in range(num):
+    #         splited[i].append(data[i][0:pos[i][0]])
+    #         splited[i].append(data[i][pos[i][0]:pos[i][1]])
+    #         splited[i].append(data[i][pos[i][1]:pos[i][2]])
+    #
+    #     piecewise_max = list()
+    #     for i in splited:
+    #         for j in i:
+    #             piecewise_max.append(max(j))
+    #
+    #     assert len(piecewise_max) == pos.shape[0]*pos.shape[1]
+    #     piecewise_max = np.asarray(piecewise_max, np.float32)
+    #     return piecewise_max
 
 
     def predict(self, words_raw):
