@@ -204,8 +204,8 @@ def get_processing_word(vocab_words=None, allow_unk=True, UNK = "<UNK>"):
     return f
 
 
-def pos_constrain(val, max_val=299, min_val=0):
-    """Constrain values from 0 to 299
+def pos_constrain(val, max_val=499, min_val=0):
+    """Constrain values from 0 to 499
 
     Args:
         val: value to be constrained
@@ -321,7 +321,18 @@ def minibatches(data, minibatch_size):
     word_batch, pos1_batch, pos2_batch, entpos_batch, y_batch = [], [], [], [], []
     for (word, pos1, pos2, entpos, y) in data:
         if len(y_batch) == minibatch_size:
-            yield word_batch, pos1_batch, pos2_batch, entpos_batch, y_batch
+            # perform padding of the given data
+            word_batch, sequence_lengths = pad_sequences(word_batch, 0)
+            pos1_batch, _ = pad_sequences(pos1_batch, 0)
+            pos2_batch, _ = pad_sequences(pos2_batch, 0)
+
+            assert len(entpos_batch) == len(sequence_lengths)
+            pos_batch = list()
+            for idx, i in enumerate(entpos_batch):
+                a, b = i
+                pos_batch.append([a, b, sequence_lengths[idx]])
+
+            yield word_batch, pos1_batch, pos2_batch, pos_batch, y_batch
             word_batch, pos1_batch, pos2_batch, entpos_batch, y_batch = [], [], [], [], []
 
         word_batch   += [word]
@@ -331,10 +342,20 @@ def minibatches(data, minibatch_size):
         y_batch      += [y]
 
     if len(y_batch) != 0:
-        yield word_batch, pos1_batch, pos2_batch, entpos_batch, y_batch
+        # perform padding of the given data
+        word_batch, sequence_lengths = pad_sequences(word_batch, 0)
+        pos1_batch, _ = pad_sequences(pos1_batch, 0)
+        pos2_batch, _ = pad_sequences(pos2_batch, 0)
+
+        assert len(entpos_batch) == len(sequence_lengths)
+        pos_batch = list()
+        for idx, i in enumerate(entpos_batch):
+            a, b = i
+            pos_batch.append([a, b, sequence_lengths[idx]])
+        yield word_batch, pos1_batch, pos2_batch, pos_batch, y_batch
 
 
-def pad_sequences(sequences, padding='post', pad_tok=0):
+def pad_sequences(sequences, pad_tok=0, padding='post'):
     """
     Args:
         sequences: a generator of list or tuple
@@ -345,7 +366,7 @@ def pad_sequences(sequences, padding='post', pad_tok=0):
     """
     sequence_padded, sequence_length = [], []
     sequence_padded = tf.keras.preprocessing.sequence.pad_sequences(sequences,
-                                        padding=padding, value=pad_tok)
+                                        padding='post', value=pad_tok)
 
     for seq in sequences:
         seq = list(seq)
@@ -361,21 +382,21 @@ def select_best_instance(data):
     Return:
         data: one batch contain best_score instances for each relation in minibatch
     """
-    word_batch, pos1_batch, pos2_batch, entpos_batch, y_batch = data
+    word_batch, pos1_batch, pos2_batch, pos_batch, y_batch = data
     relations = set(y_batch)
     empty = [[] for i in range(len(list(relations)))]
     for idx, i in enumerate(relations):
         for idy, j in enumerate(y_batch):
             if i == j:
                 empty[idx].append([word_batch[idy], pos1_batch[idy], \
-                pos2_batch[idy], entpos_batch[idy], y_batch[idy]])
+                pos2_batch[idy], pos_batch[idy], y_batch[idy]])
 
     # selected = []
     # for i in empty:
     #     scores = []
     #     for j in i:
-    #         word, pos1, pos2, entpos, y = j
-    #         output = predict(word, pos1, pos2, entpos)
+    #         word, pos1, pos2, pos, y = j
+    #         output = predict(word, pos1, pos2, pos)
     #         score = output[y]
     #         scores.append(score)
     #     idx = scores.index(max(scores))

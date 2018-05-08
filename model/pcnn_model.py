@@ -19,25 +19,21 @@ class PCNNModel(BaseModel):
 
     def add_placeholders(self):
         """Define placeholders = entries to computational graph"""
-        # shape = (batch size, length of sentence in batch)
+        # shape = (batch size, max length of sentence in batch)
         self.word_ids = tf.placeholder(tf.int32, shape=[None, None],
                         name="word_ids")
 
-        # shape = (batch size, length of sentence in batch)
+        # shape = (batch size, max length of sentence in batch)
         self.pos1_ids = tf.placeholder(tf.int32, shape=[None, None],
                         name="pos1_ids")
 
-        # shape = (batch size, length of sentence in batch)
+        # shape = (batch size, max length of sentence in batch)
         self.pos2_ids = tf.placeholder(tf.int32, shape=[None, None],
                         name="pos2_ids")
 
-        # shape = (batch size, 2)
-        self.entpos = tf.placeholder(tf.int32, shape=[None, 2],
-                        name="entpos")
-
-        # shape = (batch size)
-        self.sequence_lengths = tf.placeholder(tf.int32, shape=[None],
-                        name="sequence_lengths")
+        # shape = (batch size, 3)
+        self.pos = tf.placeholder(tf.int32, shape=[None, 3],
+                        name="pos")
 
         # shape = (batch size, 1)
         self.relations = tf.placeholder(tf.int32, shape=[None, 1],
@@ -50,14 +46,14 @@ class PCNNModel(BaseModel):
                         name="lr")
 
 
-    def get_feed_dict(self, words, pos1, pos2, entpos, relations=None, lr=None, dropout=None):
+    def get_feed_dict(self, word_ids, pos1_ids, pos2_ids, pos, relations=None, lr=None, dropout=None):
         """Given some data, build a feed dictionary
 
         Args:
-            words: list of sentences. A sentence is a list of ids of words.
-            pos1: list of sentences. A sentence is a list of positions from words to entity1.
-            pos2: list of sentences. A sentence is a list of positions from words to entity2.
-            entpos: list of tuples, containing the positions of entity1 and entity2 in sentences.
+            word_ids: list of sentences. A sentence is a list of ids of words.
+            pos1_ids: list of sentences. A sentence is a list of positions from words to entity1.
+            pos2_ids: list of sentences. A sentence is a list of positions from words to entity2.
+            pos: list of 3 length lists, containing the positions of entity1, entity2 and final word in sentences.
             relations: list of ids
             lr: (float) learning rate
             dropout: (float) keep prob
@@ -66,18 +62,16 @@ class PCNNModel(BaseModel):
             dict {placeholder: value}
 
         """
-        # perform padding of the given data
-        word_ids, sequence_lengths = pad_sequences(words, 0)
-
         # build feed dictionary
         feed = {
             self.word_ids: word_ids,
-            self.sequence_lengths: sequence_lengths
+            self.pos1_ids: pos1_ids,
+            self.pos2_ids: pos2_ids,
+            self.pos: pos
         }
 
         if relations is not None:
-            labels, _ = pad_sequences(labels, 0)
-            feed[self.labels] = labels
+            feed[self.relations] = relations
 
         if lr is not None:
             feed[self.lr] = lr
@@ -85,11 +79,11 @@ class PCNNModel(BaseModel):
         if dropout is not None:
             feed[self.dropout] = dropout
 
-        return feed, sequence_lengths
+        return feed
 
 
-    def add_word_embeddings_op(self):
-        """Defines self.word_embeddings
+    def add_sentence_embeddings_op(self):
+        """Defines self.sentence_embeddings
 
         If self.config.embeddings is not None and is a np array initialized
         with pre-trained word vectors, the word embeddings is just a look-up
@@ -108,12 +102,61 @@ class PCNNModel(BaseModel):
                         self.config.embeddings,
                         name="_word_embeddings",
                         dtype=tf.float32,
-                        trainable=self.config.train_embeddings)
+                        trainable=self.config.train_word_embeddings)
 
-            word_embeddings = tf.nn.embedding_lookup(_word_embeddings,
+            self.word_embeddings = tf.nn.embedding_lookup(_word_embeddings, \
                     self.word_ids, name="word_embeddings")
 
-        self.word_embeddings =  tf.nn.dropout(word_embeddings, self.dropout)
+        # self.word_embeddings =  tf.nn.dropout(word_embeddings, self.dropout)
+
+        with tf.variable_scope("pos1"):
+            self.logger.info("WARNING: randomly initializing pos1 vectors")
+            _pos1_embeddings = tf.get_variable(
+                    name="_pos1_embeddings",
+                    dtype=tf.float32,
+                    shape=[self.config.nposition, self.config.dim_dim_pos])
+
+            self.pos1_embeddings = tf.nn.embedding_lookup(_pos1_embeddings, \
+                    self.pos1_ids, name="pos1_embeddings")
+
+        with tf.variable_scope("pos2"):
+            self.logger.info("WARNING: randomly initializing pos2 vectors")
+            _pos2_embeddings = tf.get_variable(
+                    name="_pos2_embeddings",
+                    dtype=tf.float32,
+                    shape=[self.config.nposition, self.config.dim_dim_pos])
+
+            self.pos2_embeddings = tf.nn.embedding_lookup(_pos2_embeddings, \
+                    self.pos2_ids, name="pos2_embeddings")
+
+        assert tf.shape(self.word_embeddings[0]) == \
+            tf.shape(self.pos1_embeddings[0]) == tf.shape(self.pos2_embeddings[0])
+        assert tf.shape(self.word_embeddings[1]) == \
+            tf.shape(self.pos1_embeddings[1]) == tf.shape(self.pos2_embeddings[1])
+        assert tf.shape(self.word_embeddings[2]) == self.config.dim_word
+        assert tf.shape(self.pos1_embeddings[2]) == self.config.dim_pos
+        assert tf.shape(self.pos2_embeddings[2]) == self.config.dim_pos
+
+        with tf.variable_scope("sentence"):
+            self.sentence_embeddings = tf.concat([self.word_embeddings, \
+                self.pos1_embeddings, self.pos2_embeddings], 2)
+
+        assert tf.shape(self.sentence_embeddings[2]) == (self.config.dim_word + \
+                    2*self.config.dim_pos)
+
+
+    def add_convolution_op(self):
+        """Defines self.conv
+        """
+        with tf.variable_scope("conv"):
+            self.conv = tf.layers.conv2d(
+                inputs=self.sentence_embeddings,
+                filters=self.config.feature_maps,
+                kernel_size=[self.config.window_size, self.config.dim],
+                strides=(1, self.config.dim),
+                padding="same"
+            )
+        assert tf.shape(self.conv)[2] == 1
 
 
     def add_logits_op(self):
@@ -177,9 +220,11 @@ class PCNNModel(BaseModel):
 
 
     def build(self):
-        # NER specific functions
+        # PCNN specific functions
         self.add_placeholders()
-        self.add_word_embeddings_op()
+        self.add_sentence_embeddings_op()
+        self.add_convolution_op()
+
         self.add_logits_op()
         self.add_pred_op()
         self.add_loss_op()
@@ -297,6 +342,36 @@ class PCNNModel(BaseModel):
         acc = np.mean(accs)
 
         return {"acc": 100*acc, "f1": 100*f1}
+
+
+    def piece_split(data, pos):
+        """Split each sentence in batch into three piece
+        accodring to entity1, entity2 position and sentence length.
+
+        Args:
+            data: output matrix of convolution layer, representing batch of sentences.
+            pos: list of positions, containing entity1, entity2 position and
+                    sentence length of corresponding sentence in data.
+        Return:
+            piecewise_max: list of max pooling from sentence piece.
+        """
+        assert data.shape[0] == pos.shape[0]
+        assert pos.shape[1] == 3
+        num = data.shape[0]
+        splited = [[] for i in range(num)]
+        for i in range(num):
+            splited[i].append(data[i][0:pos[i][0]])
+            splited[i].append(data[i][pos[i][0]:pos[i][1]])
+            splited[i].append(data[i][pos[i][1]:pos[i][2]])
+
+        piecewise_max = list()
+        for i in splited:
+            for j in i:
+                piecewise_max.append(max(j))
+
+        assert len(piecewise_max) == pos.shape[0]*pos.shape[1]
+        piecewise_max = np.asarray(piecewise_max, np.float32)
+        return piecewise_max
 
 
     def predict(self, words_raw):

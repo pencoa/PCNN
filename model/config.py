@@ -39,7 +39,7 @@ class Config():
 
         self.nwords     = len(self.vocab_words)
         self.nrelations = len(self.vocab_relations)
-        self.nposition  = 300
+        self.nposition  = 500
 
         # 2. get processing functions that map str -> id
         self.processing_word     = get_processing_word(self.vocab_words, UNK = "<UNK>")
@@ -59,6 +59,11 @@ class Config():
     # embeddings
     dim_word = 50
     dim_pos  = 5
+    dim = dim_word + 2*dim_pos
+
+    # convolution
+    window_size  = 3
+    feature_maps = 230
 
     filename_train_origin = "./data/origin_data/train.txt"
     filename_train = "./data/processed_data/train.txt"
@@ -85,7 +90,8 @@ class Config():
     max_iter = None # if not None, max number of examples in Dataset
 
     # training
-    train_embeddings = False
+    train_word_embeddings = False
+    train_pos_embeddings = True
     nepochs          = 15
     dropout          = 0.5
     batch_size       = 50
@@ -96,7 +102,3 @@ class Config():
     nepoch_no_imprv  = 3
     early_stop       = True
     max_train_step   = 100000
-
-    # model hyperparameters
-    hidden_size_lstm = 64 # lstm on word embeddings
-    use_crf = True
