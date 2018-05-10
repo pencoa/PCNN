@@ -2,7 +2,7 @@ import numpy as np
 import os
 import tensorflow as tf
 
-from .data_utils import minibatches, pad_sequences, piece_split
+from .data_utils import minibatches, pad_sequences, piece_split, bags_split
 from .general_utils import Progbar
 from .base_model import BaseModel
 
@@ -334,9 +334,26 @@ class PCNNModel(BaseModel):
         prog = Progbar(target=nbatches)
 
         # iterate over dataset
-        for i, (words, labels) in enumerate(minibatches(train, batch_size)):
-            fd, _ = self.get_feed_dict(words, labels, self.config.lr,
-                    self.config.dropout)
+        for i, data in enumerate(minibatches(train, batch_size)):
+
+            # multi-instances learning
+            word_ids, pos1_ids, pos2_ids, pos, relations = [], [], [], [], []
+            word_bags, pos1_bags, pos2_bags, pos_bags, y_bags, num_bags = bags_split(data)
+            for j in range(num_bags):
+                rel = y_bags[j][0]
+                fd = self.get_feed_dict(word_bags[j], pos1_bags[j], pos2_bags[j], pos_bags[j])
+                logits = self.sess.run(self.logits, feed_dict=fd)
+                scores = logits[:, rel]
+                idx = scores.index(max(scores))
+
+                word_ids.append(word_bags[j][idx])
+                pos1_ids.append(pos1_ids[j][idx])
+                pos2_ids.append(pos2_ids[j][idx])
+                pos.append(pos[j][idx])
+                relations.append(relations[j][idx])
+
+            fd = self.get_feed_dict(word_ids, pos1_ids, pos2_ids, pos, relations, \
+                        self.config.lr, self.config.dropout)
 
             _, train_loss, summary = self.sess.run(
                     [self.train_op, self.loss, self.merged], feed_dict=fd)
@@ -390,36 +407,6 @@ class PCNNModel(BaseModel):
         acc = np.mean(accs)
 
         return {"acc": 100*acc, "f1": 100*f1}
-
-
-    # def piece_split(data, pos):
-    #     """Split each sentence in batch into three piece
-    #     accodring to entity1, entity2 position and sentence length.
-    #
-    #     Args:
-    #         data: output matrix of convolution layer, representing batch of sentences.
-    #         pos: list of positions, containing entity1, entity2 position and
-    #                 sentence length of corresponding sentence in data.
-    #     Return:
-    #         piecewise_max: list of max pooling from sentence piece.
-    #     """
-    #     assert data.shape[0] == pos.shape[0]
-    #     assert pos.shape[1] == 3
-    #     num = data.shape[0]
-    #     splited = [[] for i in range(num)]
-    #     for i in range(num):
-    #         splited[i].append(data[i][0:pos[i][0]])
-    #         splited[i].append(data[i][pos[i][0]:pos[i][1]])
-    #         splited[i].append(data[i][pos[i][1]:pos[i][2]])
-    #
-    #     piecewise_max = list()
-    #     for i in splited:
-    #         for j in i:
-    #             piecewise_max.append(max(j))
-    #
-    #     assert len(piecewise_max) == pos.shape[0]*pos.shape[1]
-    #     piecewise_max = np.asarray(piecewise_max, np.float32)
-    #     return piecewise_max
 
 
     def predict(self, words_raw):

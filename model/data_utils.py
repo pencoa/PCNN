@@ -375,32 +375,6 @@ def piece_split(data, pos, width=2):
 
     return left, mid, right
 
-        # piecewise_max = list()
-        # for i in splited:
-        #     for j in i:
-        #         piecewise_max.append(max(j))
-        #
-        # assert len(piecewise_max) == pos.shape[0]*pos.shape[1]
-        # piecewise_max = np.asarray(piecewise_max, np.float32)
-        # return piecewise_max
-
-
-# def pad_sequences(sequences, pad_tok=0, padding='post'):
-#     """
-#     Args:
-#         sequences: a generator of list or tuple
-#         pad_tok: the char to pad with
-#     Returns:
-#         a list of list where each sublist has same length
-#         a list record original length of sequences
-#     """
-#     sequence_padded = []
-#     sequence_padded = tf.keras.preprocessing.sequence.pad_sequences(sequences,
-#                                         padding='post', value=pad_tok)
-#     sequence_length = get_sequences_length(sequences)
-#
-#     return sequence_padded, sequence_length
-
 
 def get_sequences_length(sequences):
     """
@@ -418,21 +392,32 @@ def get_sequences_length(sequences):
     return sequence_length
 
 
-def select_best_instance(data):
-    """Select the best score instances for each relation in minibatch. Corresponding to Eq (9) in paper.
+def bags_split(data):
+    """Split minibatch into bags according to their relations. Corresponding to Eq (9) in paper.
     Args:
         data: one minibatch of batch size
     Return:
-        data: one batch contain best_score instances for each relation in minibatch
+        data: a list of bags, each bag contains the instances shared the same relation.
     """
     word_batch, pos1_batch, pos2_batch, pos_batch, y_batch = data
     relations = set(y_batch)
-    empty = [[] for i in range(len(list(relations)))]
+    num_bags = len(list(relations))
+    word_bags = [[] for i in range(num_bags)]
+    pos1_bags = [[] for i in range(num_bags)]
+    pos2_bags = [[] for i in range(num_bags)]
+    pos_bags  = [[] for i in range(num_bags)]
+    y_bags    = [[] for i in range(num_bags)]
     for idx, i in enumerate(relations):
         for idy, j in enumerate(y_batch):
             if i == j:
-                empty[idx].append([word_batch[idy], pos1_batch[idy], \
-                pos2_batch[idy], pos_batch[idy], y_batch[idy]])
+                word_bags[idx].append(word_batch[idy])
+                pos1_bags[idx].append(pos1_batch[idy])
+                pos2_bags[idx].append(pos2_batch[idy])
+                pos_bags[idx].append(pos_batch[idy])
+                y_bags[idx].append(y_batch[idy])
+
+    print("This batch contains {} bags.".format(num_bags))
+    return word_bags, pos1_bags, pos2_bags, pos_bags, y_bags, num_bags
 
     # selected = []
     # for i in empty:
