@@ -10,3 +10,5 @@
 *.txt
 *.zip
 test*
+!requirements.txt
+!LICENSE.txt

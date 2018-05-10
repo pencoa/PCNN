@@ -71,6 +71,8 @@ class Config():
     filename_train = "./data/processed_data/train.txt"
     filename_train_wrong = "./data/processed_data/wrong_parse_train.txt"
 
+    filename_dev = "./data/processed_data/test.txt"
+
     filename_test_origin = "./data/origin_data/test.txt"
     filename_test = "./data/processed_data/test.txt"
     filename_test_wrong = "./data/processed_data/wrong_parse_test.txt"
@@ -89,6 +91,8 @@ class Config():
 
     use_pretrained = True
 
+    MIL = True      # if True, using multi-instances learning
+    shuffle = False # if True, shuffle train dataset
     max_iter = None # if not None, max number of examples in Dataset
 
     # training

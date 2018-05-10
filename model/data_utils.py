@@ -3,6 +3,8 @@ import os
 import re
 import tensorflow as tf
 
+from .pcnn_model import PCNNModel
+
 # shared global variables to be imported from model also
 UNK = "<UNK>"
 NONE = "NA"
@@ -418,15 +420,3 @@ def bags_split(data):
 
     print("This batch contains {} bags.".format(num_bags))
     return word_bags, pos1_bags, pos2_bags, pos_bags, y_bags, num_bags
-
-    # selected = []
-    # for i in empty:
-    #     scores = []
-    #     for j in i:
-    #         word, pos1, pos2, pos, y = j
-    #         output = predict(word, pos1, pos2, pos)
-    #         score = output[y]
-    #         scores.append(score)
-    #     idx = scores.index(max(scores))
-    #     selected.append([i[idx]])
-    # return selected

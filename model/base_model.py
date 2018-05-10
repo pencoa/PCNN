@@ -1,5 +1,6 @@
 import os
 import tensorflow as tf
+from .data_utils import shuffle_data
 
 
 class BaseModel(object):
@@ -120,6 +121,10 @@ class BaseModel(object):
 
             score = self.run_epoch(train, dev, epoch)
             self.config.lr *= self.config.lr_decay # decay learning rate
+
+            if self.config.shuffle:
+                # shuffle train dataset
+                shuffle_data(self.config.filename_train)
 
             if self.config.early_stop:
                 # early stopping and saving best parameters

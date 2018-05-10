@@ -1,68 +1,50 @@
-from model.data_utils import getDataset
-from model.ner_model import NERModel
+from model.data_utils import getDataset, pos_constrain
+from model.pcnn_model import PCNNModel
 from model.config import Config
-
-import jieba
-
-
-def align_data(data):
-    """Given dict with lists, creates aligned strings
-
-    Adapted from Assignment 3 of CS224N
-
-    Args:
-        data: (dict) data["x"] = ["I", "love", "you"]
-              (dict) data["y"] = ["O", "O", "O"]
-
-    Returns:
-        data_aligned: (dict) data_align["x"] = "I love you"
-                           data_align["y"] = "O O    O  "
-
-    """
-    spacings = [max([len(seq[i]) for seq in data.values()])
-                for i in range(len(data[list(data.keys())[0]]))]
-    data_aligned = dict()
-
-    # for each entry, create aligned string
-    for key, seq in data.items():
-        str_aligned = ""
-        for token, spacing in zip(seq, spacings):
-            str_aligned += token + " " * (spacing - len(token) + 1)
-
-        data_aligned[key] = str_aligned
-
-    return data_aligned
 
 
 def interactive_shell(model):
     """Creates interactive shell to play with model
 
     Args:
-        model: instance of NERModel
+        model: instance of PCNNModel
 
     """
     model.logger.info("""
 This is an interactive mode.
 To exit, enter 'exit'.
 You can enter a sentence like
-input> 今晚打老虎""")
+input sentence> Steve_Jobs is one co-founder of Apple_Inc.""")
 
     while True:
-        sentence = input("input> ")
+        sentence = input("input sentence> ")
+        entity1  = input("input entity1> ")
+        entity2  = input("input entity2> ")
 
-        words_raw = []
-        sequence = jieba.cut(sentence)
-        for word in sequence:
-            words_raw.append(word)
+        sequence = sentence.split()
 
         if words_raw == ["exit"]:
             break
 
-        preds = model.predict(words_raw)
-        to_print = align_data({"input": words_raw, "output": preds})
+        if entity1 not in sentence or entity2 not in sentence:
+            print("entity not found in sentence.")
+            break
 
-        for key, seq in to_print.items():
-            model.logger.info(seq)
+        ent1     = sentence.index(entity1)
+        ent2     = sentence.index(entity2)
+        words, pos1_ids, pos2_ids = [], [], []
+        for idx, word in enumerate(sequence):
+            words.append(word)
+            pos1 = pos_constrain(idx - ent1)
+            pos1_ids.append(pos1)
+            pos2 = pos_constrain(idx - ent2)
+            pos2_ids.append(pos2)
+
+        pos = [ent1, ent2, len(sequence)-1]
+        pos.sort()
+
+        preds = model.predict(words, pos1_ids, pos2_ids, pos)
+        print("{}, {}, {}".format(entity1, preds, entity2))
 
 
 def main():
@@ -70,7 +52,7 @@ def main():
     config = Config()
 
     # build model
-    model = NERModel(config)
+    model = PCNNModel(config)
     model.build()
     model.restore_session(config.restore_model)
 

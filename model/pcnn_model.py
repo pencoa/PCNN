@@ -5,6 +5,7 @@ import tensorflow as tf
 from .data_utils import minibatches, pad_sequences, piece_split, bags_split
 from .general_utils import Progbar
 from .base_model import BaseModel
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 
 
@@ -189,6 +190,11 @@ class PCNNModel(BaseModel):
 
     def add_convolution_op(self, sentence_embeddings):
         """Defines conv and maxpool
+
+        Args:
+            sentence_embeddings:
+        Returns:
+            maxpool:
         """
         with tf.variable_scope("conv", reuse=True) as scope:
             _conv = tf.layers.conv2d(
@@ -254,9 +260,10 @@ class PCNNModel(BaseModel):
 
 
     def add_pred_op(self):
-        """Defines self.labels_pred
+        """Defines self.relations_pred
         """
-        self.labels_pred = tf.cast(tf.argmax(self.logits, axis=-1), tf.int32)
+        relations_pred = tf.cast(tf.argmax(self.logits, axis=-1), tf.int32)
+        self.relations_pred = tf.reshape(relations_pred, [-1])
 
 
     def add_loss_op(self):
@@ -283,37 +290,21 @@ class PCNNModel(BaseModel):
         self.initialize_session() # now self.sess is defined and vars are init
 
 
-    def predict_batch(self, words):
+    def predict_batch(self, word_ids, pos1_ids, pos2_ids, pos):
         """
         Args:
-            words: list of sentences
+            word_ids: list of sentences. A sentence is a list of ids of words.
+            pos1_ids: list of sentences. A sentence is a list of positions from words to entity1.
+            pos2_ids: list of sentences. A sentence is a list of positions from words to entity2.
+            pos: list of 3 length lists, containing the positions of entity1, entity2 and final word in sentences.
 
         Returns:
-            labels_pred: list of labels for each sentence
-            sequence_length
+            relations_pred: list of relations for each instance
 
         """
-        fd, sequence_lengths = self.get_feed_dict(words, dropout=1.0)
-
-        if self.config.use_crf:
-            # get tag scores and transition params of CRF
-            viterbi_sequences = []
-            logits, trans_params = self.sess.run(
-                    [self.logits, self.trans_params], feed_dict=fd)
-
-            # iterate over the sentences because no batching in vitervi_decode
-            for logit, sequence_length in zip(logits, sequence_lengths):
-                logit = logit[:sequence_length] # keep only the valid steps
-                viterbi_seq, viterbi_score = tf.contrib.crf.viterbi_decode(
-                        logit, trans_params)
-                viterbi_sequences += [viterbi_seq]
-
-            return viterbi_sequences, sequence_lengths
-
-        else:
-            labels_pred = self.sess.run(self.labels_pred, feed_dict=fd)
-
-            return labels_pred, sequence_lengths
+        fd = self.get_feed_dict(word_ids, pos1_ids, pos2_ids, pos, dropout=1.0)
+        relations_pred = self.sess.run(self.relations_pred, feed_dict=fd)
+        return relations_pred
 
 
     def run_epoch(self, train, dev, epoch):
@@ -336,21 +327,25 @@ class PCNNModel(BaseModel):
         # iterate over dataset
         for i, data in enumerate(minibatches(train, batch_size)):
 
-            # multi-instances learning
-            word_ids, pos1_ids, pos2_ids, pos, relations = [], [], [], [], []
-            word_bags, pos1_bags, pos2_bags, pos_bags, y_bags, num_bags = bags_split(data)
-            for j in range(num_bags):
-                rel = y_bags[j][0]
-                fd = self.get_feed_dict(word_bags[j], pos1_bags[j], pos2_bags[j], pos_bags[j])
-                logits = self.sess.run(self.logits, feed_dict=fd)
-                scores = logits[:, rel]
-                idx = scores.index(max(scores))
+            if self.config.MIL is true:
+                # multi-instances learning
+                word_ids, pos1_ids, pos2_ids, pos, relations = [], [], [], [], []
+                word_bags, pos1_bags, pos2_bags, pos_bags, y_bags, num_bags = bags_split(data)
+                for j in range(num_bags):
+                    rel = y_bags[j][0]
+                    fd = self.get_feed_dict(word_bags[j], pos1_bags[j], pos2_bags[j], pos_bags[j])
+                    logits = self.sess.run(self.logits, feed_dict=fd)
+                    scores = logits[:, rel]
+                    idx = scores.index(max(scores))
 
-                word_ids.append(word_bags[j][idx])
-                pos1_ids.append(pos1_ids[j][idx])
-                pos2_ids.append(pos2_ids[j][idx])
-                pos.append(pos[j][idx])
-                relations.append(relations[j][idx])
+                    word_ids.append(word_bags[j][idx])
+                    pos1_ids.append(pos1_ids[j][idx])
+                    pos2_ids.append(pos2_ids[j][idx])
+                    pos.append(pos[j][idx])
+                    relations.append(relations[j][idx])
+
+            else:
+                word_ids, pos1_ids, pos2_ids, pos, relations = data
 
             fd = self.get_feed_dict(word_ids, pos1_ids, pos2_ids, pos, relations, \
                         self.config.lr, self.config.dropout)
@@ -376,53 +371,44 @@ class PCNNModel(BaseModel):
         """Evaluates performance on test set
 
         Args:
-            test: dataset that yields tuple of (sentences, tags)
+            test: dataset that yields tuple of (sentences, relation tags)
 
         Returns:
             metrics: (dict) metrics["acc"] = 98.4, ...
 
         """
-        accs = []
-        correct_preds, total_correct, total_preds = 0., 0., 0.
-        for words, labels in minibatches(test, self.config.batch_size):
-            labels_pred, sequence_lengths = self.predict_batch(words)
+        y_true, y_pred = [], []
+        for data in minibatches(test, self.config.batch_size):
+            word_batch, pos1_batch, pos2_batch, pos_batch, y_batch = data
+            relations_pred = self.predict_batch(word_batch, pos1_batch, pos2_batch, pos_batch)
+            assert len(relations_pred) == len(y_batch)
+            y_true += y_batch
+            y_pred += relations_pred
 
-            for lab, lab_pred, length in zip(labels, labels_pred,
-                                                    sequence_lengths):
-                lab      = lab[:length]
-                lab_pred = lab_pred[:length]
-                accs    += [a==b for (a, b) in zip(lab, lab_pred)]
+        acc = accuracy_score(y_true, y_pred)
+        p   = precision_score(y_true, y_pred, average='macro')
+        r   = recall_score(y_true, y_pred, average='macro')
+        f1  = f1_score(y_true, y_pred, average='macro')
 
-                lab_chunks      = set(get_chunks(lab, self.config.vocab_tags))
-                lab_pred_chunks = set(get_chunks(lab_pred,
-                                                 self.config.vocab_tags))
-
-                correct_preds += len(lab_chunks & lab_pred_chunks)
-                total_preds   += len(lab_pred_chunks)
-                total_correct += len(lab_chunks)
-
-        p   = correct_preds / total_preds if correct_preds > 0 else 0
-        r   = correct_preds / total_correct if correct_preds > 0 else 0
-        f1  = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        acc = np.mean(accs)
-
-        return {"acc": 100*acc, "f1": 100*f1}
+        return {"acc":acc, "p":p, "r":r, "f1":f1}
 
 
-    def predict(self, words_raw):
+    def predict(self, words, pos1_ids, pos2_ids, pos):
         """Returns list of tags
 
         Args:
-            words_raw: list of words (string), just one sentence (no batch)
+            words: list of words (string), just one sentence (no batch)
+            pos1_ids:
+            pos2_ids:
+            pos:
 
         Returns:
-            preds: list of tags (string), one for each word in the sentence
+            preds: str, relation.
 
         """
-        words = [self.config.processing_word(w) for w in words_raw]
-        if type(words[0]) == tuple:
-            words = zip(*words)
-        pred_ids, _ = self.predict_batch([words])
+        words = [self.config.processing_word(w) for w in words]
+
+        pred_ids = self.predict_batch([words], [pos1_ids], [pos2_ids], [pos])
         preds = [self.idx_to_tag[idx] for idx in list(pred_ids[0])]
 
         return preds

@@ -8,7 +8,7 @@ def main():
     config = Config()
 
     # build model
-    model = NERModel(config)
+    model = PCNNModel(config)
     model.build()
     # model.restore_session("results/crf/model.weights/") # optional, restore weights
     # model.reinitialize_weights("proj")
