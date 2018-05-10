@@ -39,7 +39,6 @@ class Config():
 
         self.nwords     = len(self.vocab_words)
         self.nrelations = len(self.vocab_relations)
-        self.nposition  = 500
 
         # 2. get processing functions that map str -> id
         self.processing_word     = get_processing_word(self.vocab_words, UNK = "<UNK>")
@@ -60,6 +59,9 @@ class Config():
     dim_word = 50
     dim_pos  = 5
     dim = dim_word + 2*dim_pos
+
+    # position range in sentence
+    nposition  = 500
 
     # convolution
     window_size  = 3

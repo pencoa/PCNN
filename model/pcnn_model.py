@@ -125,7 +125,7 @@ class PCNNModel(BaseModel):
 
 
     def add_sentence_embeddings_op(self, word_ids, pos1_ids, pos2_ids):
-        """Defines self.sentence_embeddings
+        """Defines sentence_embeddings
 
         If self.config.embeddings is not None and is a np array initialized
         with pre-trained word vectors, the word embeddings is just a look-up
@@ -188,7 +188,7 @@ class PCNNModel(BaseModel):
         return sentence_embeddings
 
     def add_convolution_op(self, sentence_embeddings):
-        """Defines conv
+        """Defines conv and maxpool
         """
         with tf.variable_scope("conv", reuse=True) as scope:
             _conv = tf.layers.conv2d(
@@ -233,67 +233,37 @@ class PCNNModel(BaseModel):
         # shape = (batch_size, 3*feature_maps)
         maxpool  = tf.concat(_maxpool, 2)
         assert tf.shape(maxpool)[1] == 3 * self.feature_maps
+        maxpool_flat = tf.reshape(maxpool, [-1, 3*self.feature_maps])
 
-        _gvector = tf.tanh(maxpool)
+        _gvector = tf.tanh(maxpool_flat)
         self.gvector = tf.nn.dropout(_gvector, self.config.dropout)
-
 
 
     def add_logits_op(self):
         """Defines self.logits
-
-        For each word in each sentence of the batch, it corresponds to a vector
-        of scores, of dimension equal to the number of tags.
         """
-        with tf.variable_scope("bi-lstm"):
-            cell_fw = tf.contrib.rnn.LSTMCell(self.config.hidden_size_lstm)
-            cell_bw = tf.contrib.rnn.LSTMCell(self.config.hidden_size_lstm)
-            (output_fw, output_bw), _ = tf.nn.bidirectional_dynamic_rnn(
-                    cell_fw, cell_bw, self.word_embeddings,
-                    sequence_length=self.sequence_lengths, dtype=tf.float32)
-            output = tf.concat([output_fw, output_bw], axis=-1)
-            output = tf.nn.dropout(output, self.dropout)
-
         with tf.variable_scope("proj"):
-            W = tf.get_variable("W", dtype=tf.float32,
-                    shape=[2*self.config.hidden_size_lstm, self.config.ntags])
+            W1 = tf.get_variable("W1", dtype=tf.float32,
+                    shape=[3*self.feature_maps, self.config.nrelations])
 
-            b = tf.get_variable("b", shape=[self.config.ntags],
-                    dtype=tf.float32, initializer=tf.zeros_initializer())
+            b = tf.get_variable("b", dtype=tf.float32,
+                    shape=[self.config.nrelations], initializer=tf.zeros_initializer())
 
-            nsteps = tf.shape(output)[1]
-            output = tf.reshape(output, [-1, 2*self.config.hidden_size_lstm])
-            pred = tf.matmul(output, W) + b
-            self.logits = tf.reshape(pred, [-1, nsteps, self.config.ntags])
+        pred = tf.matmul(self.gvector, W1) + b
+        self.logits = tf.reshape(pred, [-1, self.config.nrelations])
 
 
     def add_pred_op(self):
         """Defines self.labels_pred
-
-        This op is defined only in the case where we don't use a CRF since in
-        that case we can make the prediction "in the graph" (thanks to tf
-        functions in other words). With theCRF, as the inference is coded
-        in python and not in pure tensroflow, we have to make the prediciton
-        outside the graph.
         """
-        if not self.config.use_crf:
-            self.labels_pred = tf.cast(tf.argmax(self.logits, axis=-1),
-                    tf.int32)
+        self.labels_pred = tf.cast(tf.argmax(self.logits, axis=-1), tf.int32)
 
 
     def add_loss_op(self):
         """Defines the loss"""
-        if self.config.use_crf:
-            log_likelihood, trans_params = tf.contrib.crf.crf_log_likelihood(
-                    self.logits, self.labels, self.sequence_lengths)
-            self.trans_params = trans_params # need to evaluate it for decoding
-            self.loss = tf.reduce_mean(-log_likelihood)
-        else:
-            losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    logits=self.logits, labels=self.labels)
-            mask = tf.sequence_mask(self.sequence_lengths)
-            losses = tf.boolean_mask(losses, mask)
-            self.loss = tf.reduce_mean(losses)
+        losses = tf.nn.softmax_cross_entropy_with_logits_v2(
+                    logits=self.logits, labels=self.relations)
+        self.loss = tf.reduce_mean(losses)
 
         # for tensorboard
         tf.summary.scalar("loss", self.loss)
@@ -303,8 +273,6 @@ class PCNNModel(BaseModel):
         # PCNN specific functions
         self.add_placeholders()
         self.add_concat_op()
-
-
         self.add_logits_op()
         self.add_pred_op()
         self.add_loss_op()
