@@ -1,5 +1,5 @@
 from model.data_utils import getDataset
-from model.ner_model import PCNNModel
+from model.pcnn_model import PCNNModel
 from model.config import Config
 
 

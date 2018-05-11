@@ -156,7 +156,7 @@ class PCNNModel(BaseModel):
             _pos1_embeddings = tf.get_variable(
                     name="_pos1_embeddings",
                     dtype=tf.float32,
-                    shape=[self.config.nposition, self.config.dim_dim_pos])
+                    shape=[self.config.nposition, self.config.dim_pos])
 
             pos1_embeddings = tf.nn.embedding_lookup(_pos1_embeddings, \
                     pos1_ids, name="pos1_embeddings")
@@ -166,7 +166,7 @@ class PCNNModel(BaseModel):
             _pos2_embeddings = tf.get_variable(
                     name="_pos2_embeddings",
                     dtype=tf.float32,
-                    shape=[self.config.nposition, self.config.dim_dim_pos])
+                    shape=[self.config.nposition, self.config.dim_pos])
 
             pos2_embeddings = tf.nn.embedding_lookup(_pos2_embeddings, \
                     pos2_ids, name="pos2_embeddings")

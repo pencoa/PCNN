@@ -45,7 +45,7 @@ class Config():
         self.processing_relation = get_processing_word(self.vocab_relations, UNK='NA')
 
         # 3. get pre-trained embeddings
-        self.embeddings = (np.load(self.filename_embeddings)
+        self.embeddings = (np.load(self.filename_embeddings)['vec']
                 if self.use_pretrained else None)
 
 

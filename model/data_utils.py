@@ -150,7 +150,7 @@ def process_wordvectors(filename_wordvectors, filename_words, filename_embedding
         vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
         write_vocab(words, filename_words)
         vec = np.array(vec, dtype=np.float32)
-        np.savez_compressed(filename_embeddings, vec)
+        np.savez(filename_embeddings, vec=vec)
 
     except IOError:
         raise MyIOError(filename_wordvectors)
