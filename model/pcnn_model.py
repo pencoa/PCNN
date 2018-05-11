@@ -133,7 +133,7 @@ class PCNNModel(BaseModel):
         and we don't train the vectors. Otherwise, a random matrix with
         the correct shape is initialized.
         """
-        with tf.variable_scope("words", reuse=True) as scope:
+        with tf.variable_scope("words", reuse=tf.AUTO_REUSE) as scope:
             if self.config.embeddings is None:
                 self.logger.info("WARNING: randomly initializing word vectors")
                 _word_embeddings = tf.get_variable(
@@ -151,7 +151,7 @@ class PCNNModel(BaseModel):
                     word_ids, name="word_embeddings")
 
 
-        with tf.variable_scope("pos1", reuse=True) as scope:
+        with tf.variable_scope("pos1", reuse=tf.AUTO_REUSE) as scope:
             self.logger.info("randomly initializing pos1 vectors")
             _pos1_embeddings = tf.get_variable(
                     name="_pos1_embeddings",
@@ -161,7 +161,7 @@ class PCNNModel(BaseModel):
             pos1_embeddings = tf.nn.embedding_lookup(_pos1_embeddings, \
                     pos1_ids, name="pos1_embeddings")
 
-        with tf.variable_scope("pos2", reuse=True) as scope:
+        with tf.variable_scope("pos2", reuse=tf.AUTO_REUSE) as scope:
             self.logger.info("randomly initializing pos2 vectors")
             _pos2_embeddings = tf.get_variable(
                     name="_pos2_embeddings",
@@ -171,20 +171,20 @@ class PCNNModel(BaseModel):
             pos2_embeddings = tf.nn.embedding_lookup(_pos2_embeddings, \
                     pos2_ids, name="pos2_embeddings")
 
-        # batch size
-        assert tf.shape(word_embeddings)[0] == \
-            tf.shape(pos1_embeddings)[0] == tf.shape(pos2_embeddings)[0]
-        # max length of sentence part
-        assert tf.shape(word_embeddings)[1] == \
-            tf.shape(pos1_embeddings)[1] == tf.shape(pos2_embeddings)[1]
-        assert tf.shape(word_embeddings)[2] == self.config.dim_word
-        assert tf.shape(pos1_embeddings)[2] == self.config.dim_pos
-        assert tf.shape(pos2_embeddings)[2] == self.config.dim_pos
+        word_emb_shape = word_embeddings.get_shape().as_list()
+        pos1_emb_shape = pos1_embeddings.get_shape().as_list()
+        pos2_emb_shape = pos2_embeddings.get_shape().as_list()
+        assert word_emb_shape[0] == pos1_emb_shape[0] == pos2_emb_shape[0]
+        assert word_emb_shape[1] == pos1_emb_shape[1] == pos2_emb_shape[1]
+        assert word_emb_shape[2] == self.config.dim_word
+        assert pos1_emb_shape[2] == self.config.dim_pos
+        assert pos2_emb_shape[2] == self.config.dim_pos
 
         sentence_embeddings = tf.concat([word_embeddings, \
             pos1_embeddings, pos2_embeddings], 2)
 
-        assert tf.shape(sentence_embeddings)[2] == self.config.dim
+        sen_emb_shape = sentence_embeddings.get_shape().as_list()
+        assert sen_emb_shape[2] == self.config.dim
         return sentence_embeddings
 
     def add_convolution_op(self, sentence_embeddings):
@@ -204,15 +204,18 @@ class PCNNModel(BaseModel):
                 padding="same",
                 name=scope.name
             )
-        assert tf.shape(_conv)[2] == 1
 
+        _conv_shape = _conv.get_shape().as_list()
+        assert _conv_shape[2] == 1
+        sen_emb_shape = sentence_embeddings.get_shape().as_list()
         conv = tf.reshape(_conv, [-1, \
-            tf.shape(sentence_embeddings)[1], self.config.feature_maps])
+            sen_emb_shape[1], self.config.feature_maps])
         maxpool = tf.layers.max_pooling1d(
             inputs=conv,
-            pool_size=tf.shape(sentence_embeddings)[1],
-            strides=tf.shape(sentence_embeddings)[1])
-        assert tf.shape(maxpool)[1] == 1
+            pool_size=sen_emb_shape[1],
+            strides=sen_emb_shape[1])
+        maxpool_shape = maxpool.get_shape().as_list()
+        assert maxpool_shape[1] == 1
         return maxpool
 
 
@@ -234,10 +237,10 @@ class PCNNModel(BaseModel):
         maxpool_right = self.add_convolution_op(sentence_embeddings_right)
         # shape = (batch_size, 3, feature_maps)
         _maxpool = tf.concat([maxpool_left, maxpool_mid, maxpool_right], 1)
-        assert tf.shape(_maxpool)[1] == 3
+        assert _maxpool.get_shape().as_list()[1] == 3
         # shape = (batch_size, 3*feature_maps)
         maxpool  = tf.concat(_maxpool, 2)
-        assert tf.shape(maxpool)[1] == 3 * self.feature_maps
+        assert maxpool.get_shape().as_list()[1] == 3 * self.feature_maps
         maxpool_flat = tf.reshape(maxpool, [-1, 3*self.feature_maps])
 
         _gvector = tf.tanh(maxpool_flat)
