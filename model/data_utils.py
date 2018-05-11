@@ -3,7 +3,6 @@ import os
 import re
 import tensorflow as tf
 
-from .pcnn_model import PCNNModel
 
 # shared global variables to be imported from model also
 UNK = "<UNK>"

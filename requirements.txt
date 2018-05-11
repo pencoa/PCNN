@@ -1,5 +1,4 @@
 tensorflow>=1.8
 numpy
-logging
 scipy
 scikit-learn

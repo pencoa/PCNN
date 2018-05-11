@@ -2,7 +2,7 @@ import numpy as np
 import os
 import tensorflow as tf
 
-from .data_utils import minibatches, pad_sequences, piece_split, bags_split
+from .data_utils import minibatches, piece_split, bags_split
 from .general_utils import Progbar
 from .base_model import BaseModel
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
@@ -150,7 +150,6 @@ class PCNNModel(BaseModel):
             word_embeddings = tf.nn.embedding_lookup(_word_embeddings, \
                     word_ids, name="word_embeddings")
 
-        # self.word_embeddings =  tf.nn.dropout(word_embeddings, self.dropout)
 
         with tf.variable_scope("pos1", reuse=True) as scope:
             self.logger.info("randomly initializing pos1 vectors")
@@ -245,8 +244,8 @@ class PCNNModel(BaseModel):
         self.gvector = tf.nn.dropout(_gvector, self.config.dropout)
 
 
-    def add_logits_op(self):
-        """Defines self.logits
+    def add_pred_op(self):
+        """Defines self.logits and self.relations_pred
         """
         with tf.variable_scope("proj"):
             W1 = tf.get_variable("W1", dtype=tf.float32,
@@ -258,10 +257,6 @@ class PCNNModel(BaseModel):
         pred = tf.matmul(self.gvector, W1) + b
         self.logits = tf.reshape(pred, [-1, self.config.nrelations])
 
-
-    def add_pred_op(self):
-        """Defines self.relations_pred
-        """
         relations_pred = tf.cast(tf.argmax(self.logits, axis=-1), tf.int32)
         self.relations_pred = tf.reshape(relations_pred, [-1])
 
@@ -280,7 +275,6 @@ class PCNNModel(BaseModel):
         # PCNN specific functions
         self.add_placeholders()
         self.add_concat_op()
-        self.add_logits_op()
         self.add_pred_op()
         self.add_loss_op()
 

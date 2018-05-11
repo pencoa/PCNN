@@ -1,8 +1,8 @@
 import os
+import numpy as np
 
 from .general_utils import get_logger
-from .data_utils import get_trimmed_polyglot_vectors, load_vocab, \
-        get_processing_word
+from .data_utils import load_vocab, get_processing_word
 
 class Config():
     def __init__(self, load=True):
@@ -45,7 +45,7 @@ class Config():
         self.processing_relation = get_processing_word(self.vocab_relations, UNK='NA')
 
         # 3. get pre-trained embeddings
-        self.embeddings = (get_trimmed_polyglot_vectors(self.filename_trimmed)
+        self.embeddings = (np.load(self.filename_embeddings)
                 if self.use_pretrained else None)
 
 
@@ -81,7 +81,7 @@ class Config():
 
     # vocab (created from dataset with build_data.py)
     filename_words = "./data/processed_data/words.txt"
-    filename_embeddings = ".data/processed_data/vectors.npz"
+    filename_embeddings = "./data/processed_data/vectors.npz"
 
     filename_relation_origin = "./data/origin_data/relation2id.txt"
     filename_relation = "./data/processed_data/relation.txt"
