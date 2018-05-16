@@ -165,7 +165,7 @@ class PCNNModel(BaseModel):
 
 
         with tf.variable_scope("pos1", reuse=tf.AUTO_REUSE):
-            self.logger.info("randomly initializing pos1 vectors")
+            # self.logger.info("randomly initializing pos1 vectors")
             _pos1_embeddings = tf.get_variable(
                     name="_pos1_embeddings",
                     dtype=tf.float32,
@@ -175,7 +175,7 @@ class PCNNModel(BaseModel):
                     pos1_ids, name="pos1_embeddings")
 
         with tf.variable_scope("pos2", reuse=tf.AUTO_REUSE):
-            self.logger.info("randomly initializing pos2 vectors")
+            # self.logger.info("randomly initializing pos2 vectors")
             _pos2_embeddings = tf.get_variable(
                     name="_pos2_embeddings",
                     dtype=tf.float32,
@@ -228,9 +228,13 @@ class PCNNModel(BaseModel):
         #     inputs=conv,
         #     pool_size=sen_emb_shape[1],
         #     strides=sen_emb_shape[1])
+        # shape = (batch_size, 1, feature_maps)
         maxpool = tf.reduce_max(conv, axis=1, keepdims=True)
         maxpool_shape = maxpool.get_shape().as_list()
         assert maxpool_shape[1] == 1
+        maxpool = tf.squeeze(maxpool)
+        # shape = (batch_size, feature_maps, 1)
+        maxpool = tf.expand_dims(maxpool, -1)
         return maxpool
 
 
@@ -246,17 +250,14 @@ class PCNNModel(BaseModel):
         sentence_embeddings_right = self.add_sentence_embeddings_op(self.word_ids_right, \
                                 self.pos1_ids_right, self.pos2_ids_right, self.maxlen_right)
 
-        # shape = (batch_size, 1, feature_maps)
+        # shape = (batch_size, feature_maps, 1)
         maxpool_left  = self.add_convolution_op(sentence_embeddings_left)
         maxpool_mid   = self.add_convolution_op(sentence_embeddings_mid)
         maxpool_right = self.add_convolution_op(sentence_embeddings_right)
-        # shape = (batch_size, 3, feature_maps)
-        _maxpool = tf.concat([maxpool_left, maxpool_mid, maxpool_right], 1)
-        assert _maxpool.get_shape().as_list()[1] == 3
+        # shape = (batch_size, feature_maps, 3)
+        _maxpool = tf.concat([maxpool_left, maxpool_mid, maxpool_right], 2)
         # shape = (batch_size, 3*feature_maps)
-        maxpool  = tf.concat(_maxpool, 2)
-        assert maxpool.get_shape().as_list()[1] == 3 * self.config.feature_maps
-        maxpool_flat = tf.reshape(maxpool, [-1, 3*self.config.feature_maps])
+        maxpool_flat = tf.reshape(_maxpool, [-1, 3*self.config.feature_maps])
 
         _gvector = tf.tanh(maxpool_flat)
         self.gvector = tf.nn.dropout(_gvector, self.config.dropout)
@@ -267,7 +268,7 @@ class PCNNModel(BaseModel):
         """
         with tf.variable_scope("proj"):
             W1 = tf.get_variable("W1", dtype=tf.float32,
-                    shape=[3*self.feature_maps, self.config.nrelations])
+                    shape=[3*self.config.feature_maps, self.config.nrelations])
 
             b = tf.get_variable("b", dtype=tf.float32,
                     shape=[self.config.nrelations], initializer=tf.zeros_initializer())

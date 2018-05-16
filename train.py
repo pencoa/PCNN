@@ -15,9 +15,9 @@ def main():
 
     # create datasets
     dev   = getDataset(config.filename_dev, config.processing_word,
-                         config.processing_tag, config.max_iter)
+                         config.processing_relation, config.max_iter)
     train = getDataset(config.filename_train, config.processing_word,
-                         config.processing_tag, config.max_iter)
+                         config.processing_relation, config.max_iter)
 
     # train model
     model.train(train, dev)
