@@ -6,6 +6,7 @@ import tensorflow as tf
 
 # shared global variables to be imported from model also
 UNK = "<UNK>"
+BLANK = "<BLANK>"
 NONE = "NA"
 
 
@@ -137,6 +138,11 @@ def process_wordvectors(filename_wordvectors, filename_words, filename_embedding
     try:
         vec = []
         words = []
+        dim = dim
+        words.append("<BLANK>")
+        vec.append(np.zeros(shape=dim))
+        words.append("<UNK>")
+        vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
         with open(filename_wordvectors, 'r') as f:
             f.readline()
             for line in f:
@@ -145,9 +151,6 @@ def process_wordvectors(filename_wordvectors, filename_words, filename_embedding
                 words.append(content[0])
                 vector = list(map(lambda x: float(x), content[1:]))
                 vec.append(vector)
-        words.append("<UNK>")
-        dim = dim
-        vec.append(np.random.normal(size=dim, loc=0, scale=0.05))
         write_vocab(words, filename_words)
         vec = np.array(vec, dtype=np.float32)
         np.savez(filename_embeddings, vec=vec)
@@ -205,8 +208,8 @@ def get_processing_word(vocab_words=None, allow_unk=True, UNK = "<UNK>"):
     return f
 
 
-def pos_constrain(val, max_val=499, min_val=0):
-    """Constrain values from 0 to 499
+def pos_constrain(val, max_val=498, min_val=0):
+    """Constrain values from 0 to 498
 
     Args:
         val: value to be constrained
@@ -391,6 +394,30 @@ def get_sequences_length(sequences):
         sequence_length += [len(seq)]
 
     return sequence_length
+
+
+def pad_sequences(sequences, pad_tok=0):
+    """
+    Args:
+        sequences: a generator of list or tuple
+        pad_tok: the char to pad with
+
+    Returns:
+        a list of list where each sublist has same length
+        a list record original length of sequences
+
+    """
+    sequence_padded, sequence_length = [], []
+    sequence_padded = tf.keras.preprocessing.sequence.pad_sequences(sequences,
+                                        padding='post', value=pad_tok)
+
+    max_sen_len = 0
+    for seq in sequences:
+        seq = list(seq)
+        if len(seq) > max_sen_len:
+            max_sen_len = len(seq)
+
+    return sequence_padded, max_sen_len
 
 
 def bags_split(data):

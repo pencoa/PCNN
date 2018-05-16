@@ -2,7 +2,7 @@ import numpy as np
 import os
 import tensorflow as tf
 
-from .data_utils import minibatches, piece_split, bags_split
+from .data_utils import minibatches, piece_split, bags_split, pad_sequences
 from .general_utils import Progbar
 from .base_model import BaseModel
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
@@ -56,6 +56,15 @@ class PCNNModel(BaseModel):
         self.pos2_ids_right = tf.placeholder(tf.int32, shape=[None, None],
                         name="pos2_ids_right")
 
+        self.maxlen_left = tf.placeholder(tf.int32, shape=[1],
+                        name="maxlen_left")
+
+        self.maxlen_mid = tf.placeholder(tf.int32, shape=[1],
+                        name="maxlen_mid")
+
+        self.maxlen_right = tf.placeholder(tf.int32, shape=[1],
+                        name="maxlen_right")
+
         # shape = (batch size, 1)
         self.relations = tf.placeholder(tf.int32, shape=[None, 1],
                         name="relations")
@@ -88,17 +97,18 @@ class PCNNModel(BaseModel):
         pos1_ids_left, pos1_ids_mid, pos1_ids_right = piece_split(pos1_ids, pos, width)
         pos2_ids_left, pos2_ids_mid, pos2_ids_right = piece_split(pos2_ids, pos, width)
 
-        word_ids_left = tf.keras.preprocessing.sequence.pad_sequences(word_ids_left, padding='post', value=0)
-        pos1_ids_left = tf.keras.preprocessing.sequence.pad_sequences(pos1_ids_left, padding='post', value=0)
-        pos2_ids_left = tf.keras.preprocessing.sequence.pad_sequences(pos2_ids_left, padding='post', value=0)
+        word_ids_left, maxlen_left = pad_sequences(word_ids_left)
+        pos1_ids_left, _ = pad_sequences(pos1_ids_left, pad_tok=499)
+        pos2_ids_left, _ = pad_sequences(pos2_ids_left, pad_tok=499)
 
-        word_ids_mid = tf.keras.preprocessing.sequence.pad_sequences(word_ids_mid, padding='post', value=0)
-        pos1_ids_mid = tf.keras.preprocessing.sequence.pad_sequences(pos1_ids_mid, padding='post', value=0)
-        pos2_ids_mid = tf.keras.preprocessing.sequence.pad_sequences(pos2_ids_mid, padding='post', value=0)
+        word_ids_mid, maxlen_mid = pad_sequences(word_ids_mid)
+        pos1_ids_mid, _ = pad_sequences(pos1_ids_mid, pad_tok=499)
+        pos2_ids_mid, _ = pad_sequences(pos2_ids_mid, pad_tok=499)
 
-        word_ids_right = tf.keras.preprocessing.sequence.pad_sequences(word_ids_right, padding='post', value=0)
-        pos1_ids_right = tf.keras.preprocessing.sequence.pad_sequences(pos1_ids_right, padding='post', value=0)
-        pos2_ids_right = tf.keras.preprocessing.sequence.pad_sequences(pos2_ids_right, padding='post', value=0)
+        word_ids_right, maxlen_right = pad_sequences(word_ids_right)
+        pos1_ids_right, _ = pad_sequences(pos1_ids_right, pad_tok=499)
+        pos2_ids_right, _ = pad_sequences(pos2_ids_right, pad_tok=499)
+
 
         # build feed dictionary
         feed = {
@@ -110,7 +120,10 @@ class PCNNModel(BaseModel):
             self.pos2_ids_mid:   pos2_ids_mid,
             self.word_ids_right: word_ids_right,
             self.pos1_ids_right: pos1_ids_right,
-            self.pos2_ids_right: pos2_ids_right
+            self.pos2_ids_right: pos2_ids_right,
+            self.maxlen_left:    maxlen_left,
+            self.maxlen_mid:     maxlen_mid,
+            self.maxlen_right:   maxlen_right
         }
 
         if relations is not None:
@@ -125,7 +138,7 @@ class PCNNModel(BaseModel):
         return feed
 
 
-    def add_sentence_embeddings_op(self, word_ids, pos1_ids, pos2_ids):
+    def add_sentence_embeddings_op(self, word_ids, pos1_ids, pos2_ids, maxlen):
         """Defines sentence_embeddings
 
         If self.config.embeddings is not None and is a np array initialized
@@ -133,7 +146,7 @@ class PCNNModel(BaseModel):
         and we don't train the vectors. Otherwise, a random matrix with
         the correct shape is initialized.
         """
-        with tf.variable_scope("words", reuse=tf.AUTO_REUSE) as scope:
+        with tf.variable_scope("words", reuse=tf.AUTO_REUSE):
             if self.config.embeddings is None:
                 self.logger.info("WARNING: randomly initializing word vectors")
                 _word_embeddings = tf.get_variable(
@@ -151,7 +164,7 @@ class PCNNModel(BaseModel):
                     word_ids, name="word_embeddings")
 
 
-        with tf.variable_scope("pos1", reuse=tf.AUTO_REUSE) as scope:
+        with tf.variable_scope("pos1", reuse=tf.AUTO_REUSE):
             self.logger.info("randomly initializing pos1 vectors")
             _pos1_embeddings = tf.get_variable(
                     name="_pos1_embeddings",
@@ -161,7 +174,7 @@ class PCNNModel(BaseModel):
             pos1_embeddings = tf.nn.embedding_lookup(_pos1_embeddings, \
                     pos1_ids, name="pos1_embeddings")
 
-        with tf.variable_scope("pos2", reuse=tf.AUTO_REUSE) as scope:
+        with tf.variable_scope("pos2", reuse=tf.AUTO_REUSE):
             self.logger.info("randomly initializing pos2 vectors")
             _pos2_embeddings = tf.get_variable(
                     name="_pos2_embeddings",
@@ -185,6 +198,8 @@ class PCNNModel(BaseModel):
 
         sen_emb_shape = sentence_embeddings.get_shape().as_list()
         assert sen_emb_shape[2] == self.config.dim
+        # (batch_size, max length of sentences in batch, vector representation dimension, 1)
+        sentence_embeddings = tf.expand_dims(sentence_embeddings, -1)
         return sentence_embeddings
 
     def add_convolution_op(self, sentence_embeddings):
@@ -195,7 +210,7 @@ class PCNNModel(BaseModel):
         Returns:
             maxpool:
         """
-        with tf.variable_scope("conv", reuse=True) as scope:
+        with tf.variable_scope("conv", reuse=tf.AUTO_REUSE) as scope:
             _conv = tf.layers.conv2d(
                 inputs=sentence_embeddings,
                 filters=self.config.feature_maps,
@@ -208,12 +223,12 @@ class PCNNModel(BaseModel):
         _conv_shape = _conv.get_shape().as_list()
         assert _conv_shape[2] == 1
         sen_emb_shape = sentence_embeddings.get_shape().as_list()
-        conv = tf.reshape(_conv, [-1, \
-            sen_emb_shape[1], self.config.feature_maps])
-        maxpool = tf.layers.max_pooling1d(
-            inputs=conv,
-            pool_size=sen_emb_shape[1],
-            strides=sen_emb_shape[1])
+        conv = tf.squeeze(_conv, [2])
+        # maxpool = tf.layers.max_pooling1d(
+        #     inputs=conv,
+        #     pool_size=sen_emb_shape[1],
+        #     strides=sen_emb_shape[1])
+        maxpool = tf.reduce_max(conv, axis=1, keepdims=True)
         maxpool_shape = maxpool.get_shape().as_list()
         assert maxpool_shape[1] == 1
         return maxpool
@@ -225,11 +240,11 @@ class PCNNModel(BaseModel):
         Second, concat different channels or feature maps.
         """
         sentence_embeddings_left  = self.add_sentence_embeddings_op(self.word_ids_left, \
-                                    self.pos1_ids_left, self.pos2_ids_left)
+                                self.pos1_ids_left, self.pos2_ids_left, self.maxlen_left)
         sentence_embeddings_mid   = self.add_sentence_embeddings_op(self.word_ids_mid, \
-                                    self.pos1_ids_mid, self.pos2_ids_mid)
+                                self.pos1_ids_mid, self.pos2_ids_mid, self.maxlen_mid)
         sentence_embeddings_right = self.add_sentence_embeddings_op(self.word_ids_right, \
-                                    self.pos1_ids_right, self.pos2_ids_right)
+                                self.pos1_ids_right, self.pos2_ids_right, self.maxlen_right)
 
         # shape = (batch_size, 1, feature_maps)
         maxpool_left  = self.add_convolution_op(sentence_embeddings_left)
@@ -240,8 +255,8 @@ class PCNNModel(BaseModel):
         assert _maxpool.get_shape().as_list()[1] == 3
         # shape = (batch_size, 3*feature_maps)
         maxpool  = tf.concat(_maxpool, 2)
-        assert maxpool.get_shape().as_list()[1] == 3 * self.feature_maps
-        maxpool_flat = tf.reshape(maxpool, [-1, 3*self.feature_maps])
+        assert maxpool.get_shape().as_list()[1] == 3 * self.config.feature_maps
+        maxpool_flat = tf.reshape(maxpool, [-1, 3*self.config.feature_maps])
 
         _gvector = tf.tanh(maxpool_flat)
         self.gvector = tf.nn.dropout(_gvector, self.config.dropout)
