@@ -4,9 +4,6 @@ download:
 	unzip ./data/origin_data.zip -d ./data
 	mkdir ./data/processed_data
 
-install:
-	pip install -r requirements.txt
-
 run:
 	python build_data.py
 	python train.py

@@ -9,6 +9,7 @@
 *.pb
 *.txt
 *.zip
+*.local
 test*
 !requirements.txt
 !LICENSE.txt

@@ -100,7 +100,7 @@ class BaseModel(object):
 
         """
         self.merged      = tf.summary.merge_all()
-        self.file_writer = tf.summary.FileWriter(self.config.dir_output, self.sess.graph)
+        self.file_writer = tf.summary.FileWriter(self.config.graph_output, self.sess.graph)
 
 
     def train(self, train, dev):

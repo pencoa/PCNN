@@ -51,6 +51,7 @@ class Config():
 
     # general config
     dir_output = "./results/test/"
+    graph_output = "./graph"
     dir_model  = dir_output + "model.weights/" # directory to save models
     path_log   = dir_output + "log.txt"
     restore_model = "./results/test/model.weights/early_best.ckpt"

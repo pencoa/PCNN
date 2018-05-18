@@ -97,17 +97,18 @@ class PCNNModel(BaseModel):
         pos1_ids_left, pos1_ids_mid, pos1_ids_right = piece_split(pos1_ids, pos, width)
         pos2_ids_left, pos2_ids_mid, pos2_ids_right = piece_split(pos2_ids, pos, width)
 
+        blk = self.config.nposition - 1
         word_ids_left, maxlen_left = pad_sequences(word_ids_left)
-        pos1_ids_left, _ = pad_sequences(pos1_ids_left, pad_tok=499)
-        pos2_ids_left, _ = pad_sequences(pos2_ids_left, pad_tok=499)
+        pos1_ids_left, _ = pad_sequences(pos1_ids_left, pad_tok=blk)
+        pos2_ids_left, _ = pad_sequences(pos2_ids_left, pad_tok=blk)
 
         word_ids_mid, maxlen_mid = pad_sequences(word_ids_mid)
-        pos1_ids_mid, _ = pad_sequences(pos1_ids_mid, pad_tok=499)
-        pos2_ids_mid, _ = pad_sequences(pos2_ids_mid, pad_tok=499)
+        pos1_ids_mid, _ = pad_sequences(pos1_ids_mid, pad_tok=blk)
+        pos2_ids_mid, _ = pad_sequences(pos2_ids_mid, pad_tok=blk)
 
         word_ids_right, maxlen_right = pad_sequences(word_ids_right)
-        pos1_ids_right, _ = pad_sequences(pos1_ids_right, pad_tok=499)
-        pos2_ids_right, _ = pad_sequences(pos2_ids_right, pad_tok=499)
+        pos1_ids_right, _ = pad_sequences(pos1_ids_right, pad_tok=blk)
+        pos2_ids_right, _ = pad_sequences(pos2_ids_right, pad_tok=blk)
 
 
         # build feed dictionary
@@ -290,6 +291,15 @@ class PCNNModel(BaseModel):
         tf.summary.scalar("loss", self.loss)
 
 
+    def log_trainable(self):
+        variables_names = [v.name for v in tf.trainable_variables()]
+        values = self.sess.run(variables_names)
+        for k, v in zip(variables_names, values):
+            self.logger.info("Variable: ", k)
+            self.logger.info("Shape: ", v.shape)
+            self.logger.info(v)
+
+
     def build(self):
         # PCNN specific functions
         self.add_placeholders()
@@ -301,6 +311,7 @@ class PCNNModel(BaseModel):
         self.add_train_op(self.config.lr_method, self.lr, self.loss,
                 self.config.clip)
         self.initialize_session() # now self.sess is defined and vars are init
+        self.log_trainable()
 
 
     def predict_batch(self, word_ids, pos1_ids, pos2_ids, pos):
@@ -340,7 +351,7 @@ class PCNNModel(BaseModel):
         # iterate over dataset
         for i, data in enumerate(minibatches(train, batch_size)):
 
-            if self.config.MIL is true:
+            if self.config.MIL:
                 # multi-instances learning
                 word_ids, pos1_ids, pos2_ids, pos, relations = [], [], [], [], []
                 word_bags, pos1_bags, pos2_bags, pos_bags, y_bags, num_bags = bags_split(data)
