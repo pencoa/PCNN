@@ -107,7 +107,7 @@ class BaseModel(object):
         """Performs training with early stopping and lr exponential decay
 
         Args:
-            train: dataset that yields tuple of (sentences, tags)
+            train: dataset that yields list of tuple (word_idx, pos1, pos2, relation)
             dev: dataset
 
         """

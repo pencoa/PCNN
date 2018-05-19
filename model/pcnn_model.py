@@ -210,6 +210,7 @@ class PCNNModel(BaseModel):
             sentence_embeddings:
         Returns:
             maxpool:
+            
         """
         with tf.variable_scope("conv", reuse=tf.AUTO_REUSE) as scope:
             _conv = tf.layers.conv2d(
@@ -225,11 +226,6 @@ class PCNNModel(BaseModel):
         assert _conv_shape[2] == 1
         sen_emb_shape = sentence_embeddings.get_shape().as_list()
         conv = tf.squeeze(_conv, [2])
-        # maxpool = tf.layers.max_pooling1d(
-        #     inputs=conv,
-        #     pool_size=sen_emb_shape[1],
-        #     strides=sen_emb_shape[1])
-        # shape = (batch_size, 1, feature_maps)
         maxpool = tf.reduce_max(conv, axis=1, keepdims=True)
         maxpool_shape = maxpool.get_shape().as_list()
         assert maxpool_shape[1] == 1
@@ -292,6 +288,8 @@ class PCNNModel(BaseModel):
 
 
     def log_trainable(self):
+        """Print out trainable variables
+        """
         variables_names = [v.name for v in tf.trainable_variables()]
         values = self.sess.run(variables_names)
         for k, v in zip(variables_names, values):
@@ -335,7 +333,7 @@ class PCNNModel(BaseModel):
         """Performs one complete pass over the train set and evaluate on dev
 
         Args:
-            train: dataset that yields tuple of sentences, tags
+            train: dataset that yields list of tuple (word_idx, pos1, pos2, relation)
             dev: dataset
             epoch: (int) index of the current epoch
 

@@ -113,7 +113,7 @@ def shuffle_data(filename):
             subprocess.run(["shuf", "-o", filename, filename])
             print("Shuffle {} successfully".format(filename))
         except:
-            print("shuf is uninstalled.")
+            print("Failed to shuffle datasets.")
     # Mac OS
     elif platform == "darwin":
         try:
