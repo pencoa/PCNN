@@ -1,6 +1,6 @@
 # PCNN
 
-Piecewise Convolution Neural Network is an architecture for [Relation Extraction](https://en.wikipedia.org/wiki/Relationship_extraction) task in NLP.  
+Piecewise Convolution Neural Network is one kind of architecture for [Relation Extraction](https://en.wikipedia.org/wiki/Relationship_extraction) task in NLP.  
 Applying one traditional single layer Convolution on sentence embeddings can capture n-gram features. After max pooling, only the strongest feature return, which is insufficient for Relation Extraction tasks.  
 The PCNN architecture divide one sentence into three parts according to entities positions. This modification improve the capability of Relation Extraction.  
 The original architecture of PCNN is designed as follows.  
