@@ -27,14 +27,14 @@ Usage
 ```
 shuf -o ./path/to/shuf_data ./path/to/origin_data
 ```
-If you use OS X, [gshuf](https://apple.stackexchange.com/questions/142860/install-shuf-on-os-x) is the alternative.
+If you use OS X, [gshuf](https://apple.stackexchange.com/questions/142860/install-shuf-on-os-x) is alternative.
 ```
 brew install coreutils
 ```
 ```
 gshuf -o ./path/to/shuf_data ./path/to/origin_data
 ```
-You can configure `./model/config.py` to set shuffle.
+You can configure `./model/config.py` to set parameters.
 
 ### Download Dataset
 ```
