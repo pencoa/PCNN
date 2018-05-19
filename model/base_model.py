@@ -48,6 +48,8 @@ class BaseModel(object):
                 optimizer = tf.train.GradientDescentOptimizer(lr)
             elif _lr_m == 'rmsprop':
                 optimizer = tf.train.RMSPropOptimizer(lr)
+            elif _lr_m == 'adadelta':
+                optimizer = tf.train.AdadeltaOptimizer(lr)
             else:
                 raise NotImplementedError("Unknown method {}".format(_lr_m))
 
