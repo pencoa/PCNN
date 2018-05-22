@@ -210,7 +210,7 @@ class PCNNModel(BaseModel):
             sentence_embeddings:
         Returns:
             maxpool:
-            
+
         """
         with tf.variable_scope("conv", reuse=tf.AUTO_REUSE) as scope:
             _conv = tf.layers.conv2d(
@@ -293,9 +293,9 @@ class PCNNModel(BaseModel):
         variables_names = [v.name for v in tf.trainable_variables()]
         values = self.sess.run(variables_names)
         for k, v in zip(variables_names, values):
-            self.logger.info("Variable: ", k)
-            self.logger.info("Shape: ", v.shape)
-            self.logger.info(v)
+            self.logger.info("Variable: {}".format(k))
+            self.logger.info("Shape: {}".format(v.shape))
+            # self.logger.info(v)
 
 
     def build(self):
