@@ -1,7 +1,6 @@
 import numpy as np
 import os
 import re
-import tensorflow as tf
 
 
 # shared global variables to be imported from model also
@@ -370,13 +369,13 @@ def piece_split(data, pos, width=2):
     assert len(data) == len(pos)
     assert np.asarray(pos, dtype=np.int32).shape[1] == 3
     num = len(data)
-    left  = [[] for i in range(num)]
-    mid   = [[] for i in range(num)]
-    right = [[] for i in range(num)]
+    left  = []
+    mid   = []
+    right = []
     for i in range(num):
-        left[i].append(data[i][0:(pos[i][0]+width)])
-        mid[i].append(data[i][max(0, (pos[i][0]-width)) : min((pos[i][1]+width), (pos[i][2]-1))])
-        right[i].append(data[i][(pos[i][1]-width):(pos[i][2]-1)])
+        left.append(data[i][0:(pos[i][0]+width)])
+        mid.append(data[i][max(0, (pos[i][0]-width)) : min((pos[i][1]+width), (pos[i][2]-1))])
+        right.append(data[i][(pos[i][1]-width):(pos[i][2]-1)])
 
     return left, mid, right
 
@@ -408,14 +407,15 @@ def pad_sequences(sequences, pad_tok=0):
         a list record original length of sequences
 
     """
-    sequence_padded = []
+    _sequence_padded = []
     max_length = max(map(lambda x : len(x), sequences))
 
     for seq in sequences:
         seq = list(seq)
         seq_ = seq[:max_length] + [pad_tok]*max(max_length - len(seq), 0)
-        sequence_padded +=  [seq_]
+        _sequence_padded +=  [seq_]
 
+    sequence_padded = np.asarray(_sequence_padded)
     return sequence_padded
 
 
