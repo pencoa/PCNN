@@ -13,3 +13,4 @@
 test*
 !requirements.txt
 !LICENSE.txt
+events*

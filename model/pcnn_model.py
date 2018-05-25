@@ -56,15 +56,6 @@ class PCNNModel(BaseModel):
         self.pos2_ids_right = tf.placeholder(tf.int32, shape=[None, None],
                         name="pos2_ids_right")
 
-        self.maxlen_left = tf.placeholder(tf.int32, shape=[1],
-                        name="maxlen_left")
-
-        self.maxlen_mid = tf.placeholder(tf.int32, shape=[1],
-                        name="maxlen_mid")
-
-        self.maxlen_right = tf.placeholder(tf.int32, shape=[1],
-                        name="maxlen_right")
-
         # shape = (batch size, 1)
         self.relations = tf.placeholder(tf.int32, shape=[None, 1],
                         name="relations")
@@ -98,17 +89,17 @@ class PCNNModel(BaseModel):
         pos2_ids_left, pos2_ids_mid, pos2_ids_right = piece_split(pos2_ids, pos, width)
 
         blk = self.config.nposition - 1
-        word_ids_left, maxlen_left = pad_sequences(word_ids_left)
-        pos1_ids_left, _ = pad_sequences(pos1_ids_left, pad_tok=blk)
-        pos2_ids_left, _ = pad_sequences(pos2_ids_left, pad_tok=blk)
+        word_ids_left = pad_sequences(word_ids_left)
+        pos1_ids_left = pad_sequences(pos1_ids_left, pad_tok=blk)
+        pos2_ids_left = pad_sequences(pos2_ids_left, pad_tok=blk)
 
-        word_ids_mid, maxlen_mid = pad_sequences(word_ids_mid)
-        pos1_ids_mid, _ = pad_sequences(pos1_ids_mid, pad_tok=blk)
-        pos2_ids_mid, _ = pad_sequences(pos2_ids_mid, pad_tok=blk)
+        word_ids_mid = pad_sequences(word_ids_mid)
+        pos1_ids_mid = pad_sequences(pos1_ids_mid, pad_tok=blk)
+        pos2_ids_mid = pad_sequences(pos2_ids_mid, pad_tok=blk)
 
-        word_ids_right, maxlen_right = pad_sequences(word_ids_right)
-        pos1_ids_right, _ = pad_sequences(pos1_ids_right, pad_tok=blk)
-        pos2_ids_right, _ = pad_sequences(pos2_ids_right, pad_tok=blk)
+        word_ids_right = pad_sequences(word_ids_right)
+        pos1_ids_right = pad_sequences(pos1_ids_right, pad_tok=blk)
+        pos2_ids_right = pad_sequences(pos2_ids_right, pad_tok=blk)
 
 
         # build feed dictionary
@@ -121,10 +112,7 @@ class PCNNModel(BaseModel):
             self.pos2_ids_mid:   pos2_ids_mid,
             self.word_ids_right: word_ids_right,
             self.pos1_ids_right: pos1_ids_right,
-            self.pos2_ids_right: pos2_ids_right,
-            self.maxlen_left:    maxlen_left,
-            self.maxlen_mid:     maxlen_mid,
-            self.maxlen_right:   maxlen_right
+            self.pos2_ids_right: pos2_ids_right
         }
 
         if relations is not None:
@@ -139,7 +127,7 @@ class PCNNModel(BaseModel):
         return feed
 
 
-    def add_sentence_embeddings_op(self, word_ids, pos1_ids, pos2_ids, maxlen):
+    def add_sentence_embeddings_op(self, word_ids, pos1_ids, pos2_ids):
         """Defines sentence_embeddings
 
         If self.config.embeddings is not None and is a np array initialized
@@ -166,7 +154,6 @@ class PCNNModel(BaseModel):
 
 
         with tf.variable_scope("pos1", reuse=tf.AUTO_REUSE):
-            # self.logger.info("randomly initializing pos1 vectors")
             _pos1_embeddings = tf.get_variable(
                     name="_pos1_embeddings",
                     dtype=tf.float32,
@@ -176,7 +163,6 @@ class PCNNModel(BaseModel):
                     pos1_ids, name="pos1_embeddings")
 
         with tf.variable_scope("pos2", reuse=tf.AUTO_REUSE):
-            # self.logger.info("randomly initializing pos2 vectors")
             _pos2_embeddings = tf.get_variable(
                     name="_pos2_embeddings",
                     dtype=tf.float32,
@@ -241,11 +227,11 @@ class PCNNModel(BaseModel):
         Second, concat different channels or feature maps.
         """
         sentence_embeddings_left  = self.add_sentence_embeddings_op(self.word_ids_left, \
-                                self.pos1_ids_left, self.pos2_ids_left, self.maxlen_left)
+                                self.pos1_ids_left, self.pos2_ids_left)
         sentence_embeddings_mid   = self.add_sentence_embeddings_op(self.word_ids_mid, \
-                                self.pos1_ids_mid, self.pos2_ids_mid, self.maxlen_mid)
+                                self.pos1_ids_mid, self.pos2_ids_mid)
         sentence_embeddings_right = self.add_sentence_embeddings_op(self.word_ids_right, \
-                                self.pos1_ids_right, self.pos2_ids_right, self.maxlen_right)
+                                self.pos1_ids_right, self.pos2_ids_right)
 
         # shape = (batch_size, feature_maps, 1)
         maxpool_left  = self.add_convolution_op(sentence_embeddings_left)
@@ -268,7 +254,7 @@ class PCNNModel(BaseModel):
                     shape=[3*self.config.feature_maps, self.config.nrelations])
 
             b = tf.get_variable("b", dtype=tf.float32,
-                    shape=[self.config.nrelations], initializer=tf.zeros_initializer())
+                    shape=[self.config.nrelations, 1], initializer=tf.zeros_initializer())
 
         pred = tf.matmul(self.gvector, W1) + b
         self.logits = tf.reshape(pred, [-1, self.config.nrelations])

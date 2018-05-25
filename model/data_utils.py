@@ -60,6 +60,7 @@ class getDataset(object):
                 if self.max_iter is not None and niter > self.max_iter:
                     break
                 word_idx, pos1, pos2 = [], [], []
+                line = re.sub('###END###', '</s>', line)
                 line = line.strip()
                 content = line.split()
                 ent1     = content[2]
@@ -67,7 +68,7 @@ class getDataset(object):
                 relation = content[4]
                 if self.processing_relation is not None:
                     relation = self.processing_relation(relation)
-                sentence = line[5:-1]
+                sentence = line[5:]
                 ent1pos  = sentence.index(ent1)
                 ent2pos  = sentence.index(ent2)
                 for idx, word in enumerate(sentence):
@@ -374,7 +375,7 @@ def piece_split(data, pos, width=2):
     right = [[] for i in range(num)]
     for i in range(num):
         left[i].append(data[i][0:(pos[i][0]+width)])
-        mid[i].append(data[i][max(0,(pos[i][0]-width)):(pos[i][1]+width)])
+        mid[i].append(data[i][max(0, (pos[i][0]-width)) : min((pos[i][1]+width), (pos[i][2]-1))])
         right[i].append(data[i][(pos[i][1]-width):(pos[i][2]-1)])
 
     return left, mid, right
@@ -407,17 +408,15 @@ def pad_sequences(sequences, pad_tok=0):
         a list record original length of sequences
 
     """
-    sequence_padded, sequence_length = [], []
-    sequence_padded = tf.keras.preprocessing.sequence.pad_sequences(sequences,
-                                        padding='post', value=pad_tok)
+    sequence_padded = []
+    max_length = max(map(lambda x : len(x), sequences))
 
-    max_sen_len = 0
     for seq in sequences:
         seq = list(seq)
-        if len(seq) > max_sen_len:
-            max_sen_len = len(seq)
+        seq_ = seq[:max_length] + [pad_tok]*max(max_length - len(seq), 0)
+        sequence_padded +=  [seq_]
 
-    return sequence_padded, max_sen_len
+    return sequence_padded
 
 
 def bags_split(data):
