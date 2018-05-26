@@ -351,7 +351,7 @@ def minibatches(data, minibatch_size):
         yield word_batch, pos1_batch, pos2_batch, pos_batch, y_batch
 
 
-def piece_split(data, pos, width=2):
+def to_piece(data, pos, width=2):
     """Split each sentence in batch into three piece
     accodring to entity1, entity2 position and sentence length.
 
@@ -419,7 +419,7 @@ def pad_sequences(sequences, pad_tok=0):
     return sequence_padded
 
 
-def bags_split(data):
+def to_bags(data):
     """Split minibatch into bags according to their relations. Corresponding to Eq (9) in paper.
     Args:
         data: one minibatch of batch size

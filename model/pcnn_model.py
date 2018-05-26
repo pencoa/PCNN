@@ -2,7 +2,7 @@ import numpy as np
 import os
 import tensorflow as tf
 
-from .data_utils import minibatches, piece_split, bags_split, pad_sequences
+from .data_utils import minibatches, to_piece, to_bags, pad_sequences
 from .general_utils import Progbar
 from .base_model import BaseModel
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
@@ -84,9 +84,9 @@ class PCNNModel(BaseModel):
 
         """
         width = self.config.window_size - 1
-        word_ids_left, word_ids_mid, word_ids_right = piece_split(word_ids, pos, width)
-        pos1_ids_left, pos1_ids_mid, pos1_ids_right = piece_split(pos1_ids, pos, width)
-        pos2_ids_left, pos2_ids_mid, pos2_ids_right = piece_split(pos2_ids, pos, width)
+        word_ids_left, word_ids_mid, word_ids_right = to_piece(word_ids, pos, width)
+        pos1_ids_left, pos1_ids_mid, pos1_ids_right = to_piece(pos1_ids, pos, width)
+        pos2_ids_left, pos2_ids_mid, pos2_ids_right = to_piece(pos2_ids, pos, width)
 
         blk = self.config.nposition - 1
         word_ids_left = pad_sequences(word_ids_left)
@@ -339,19 +339,19 @@ class PCNNModel(BaseModel):
             if self.config.MIL:
                 # multi-instances learning
                 word_ids, pos1_ids, pos2_ids, pos, relations = [], [], [], [], []
-                word_bags, pos1_bags, pos2_bags, pos_bags, y_bags, num_bags = bags_split(data)
+                word_bags, pos1_bags, pos2_bags, pos_bags, y_bags, num_bags = to_bags(data)
                 for j in range(num_bags):
                     rel = y_bags[j][0]
                     fd = self.get_feed_dict(word_bags[j], pos1_bags[j], pos2_bags[j], pos_bags[j])
                     logits = self.sess.run(self.logits, feed_dict=fd)
                     scores = logits[:, rel]
-                    idx = scores.index(max(scores))
+                    idx = scores.argmax(axis=0)
 
                     word_ids.append(word_bags[j][idx])
-                    pos1_ids.append(pos1_ids[j][idx])
-                    pos2_ids.append(pos2_ids[j][idx])
-                    pos.append(pos[j][idx])
-                    relations.append(relations[j][idx])
+                    pos1_ids.append(pos1_bags[j][idx])
+                    pos2_ids.append(pos2_bags[j][idx])
+                    pos.append(pos_bags[j][idx])
+                    relations.append(y_bags[j][idx])
 
             else:
                 word_ids, pos1_ids, pos2_ids, pos, relations = data
