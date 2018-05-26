@@ -116,6 +116,7 @@ class PCNNModel(BaseModel):
         }
 
         if relations is not None:
+            relations = np.asarray(relations).reshape((-1, 1))
             feed[self.relations] = relations
 
         if lr is not None:
@@ -241,7 +242,7 @@ class PCNNModel(BaseModel):
         _maxpool = tf.concat([maxpool_left, maxpool_mid, maxpool_right], 2)
         # shape = (batch_size, 3*feature_maps)
         maxpool_flat = tf.reshape(_maxpool, [-1, 3*self.config.feature_maps])
-
+        # shape = (batch_size, 3*feature_maps)
         _gvector = tf.tanh(maxpool_flat)
         self.gvector = tf.nn.dropout(_gvector, self.config.dropout)
 
@@ -254,7 +255,7 @@ class PCNNModel(BaseModel):
                     shape=[3*self.config.feature_maps, self.config.nrelations])
 
             b = tf.get_variable("b", dtype=tf.float32,
-                    shape=[self.config.nrelations, 1], initializer=tf.zeros_initializer())
+                    shape=[self.config.nrelations], initializer=tf.zeros_initializer())
 
         pred = tf.matmul(self.gvector, W1) + b
         self.logits = tf.reshape(pred, [-1, self.config.nrelations])

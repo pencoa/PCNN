@@ -92,7 +92,7 @@ class Config():
 
     use_pretrained = True
 
-    MIL = False      # if True, using multi-instances learning
+    MIL = True      # if True, using multi-instances learning
     shuffle = False # if True, shuffle train dataset
     max_iter = None # if not None, max number of examples in Dataset
 
