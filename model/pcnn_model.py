@@ -258,9 +258,11 @@ class PCNNModel(BaseModel):
                     shape=[self.config.nrelations], initializer=tf.zeros_initializer())
 
         pred = tf.matmul(self.gvector, W1) + b
+        # shape = (batch_size, nrelations)
         self.logits = tf.reshape(pred, [-1, self.config.nrelations])
-
+        # shape = (batch_size, 1)
         relations_pred = tf.cast(tf.argmax(self.logits, axis=-1), tf.int32)
+        # shape = (batch_size, )
         self.relations_pred = tf.reshape(relations_pred, [-1])
 
 
@@ -392,7 +394,7 @@ class PCNNModel(BaseModel):
             relations_pred = self.predict_batch(word_batch, pos1_batch, pos2_batch, pos_batch)
             assert len(relations_pred) == len(y_batch)
             y_true += y_batch
-            y_pred += relations_pred
+            y_pred += relations_pred.tolist()
 
         acc = accuracy_score(y_true, y_pred)
         p   = precision_score(y_true, y_pred, average='macro')
